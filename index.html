@@ -17,9 +17,7 @@
       main { padding: 14px; max-width: 980px; margin: 0 auto; }
       .card { background: #121214; border: 1px solid #222; border-radius: 16px; padding: 14px; margin: 12px 0; }
       .row { display: grid; grid-template-columns: 1fr; gap: 10px; }
-      @media (min-width: 720px) {
-        .row.cols2 { grid-template-columns: 1fr 1fr; }
-      }
+      @media (min-width: 720px) { .row.cols2 { grid-template-columns: 1fr 1fr; } }
       label { font-size: 12px; color: #cfcfd6; display: block; margin: 0 0 6px; }
       input, textarea {
         width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 12px;
@@ -78,7 +76,7 @@
           </div>
 
           <div class="muted" style="margin-top: 10px">
-            Rule: each required length can use 1 bar OR weld up to 2 bars (max 2). If not possible, uses a new full bar of “Stock Length”.
+            Rule: packs multiple cuts into each bar (stock first). If a cut doesn’t fit in one bar, it can be welded using 2 bars max (split across 2 bars).
           </div>
         </div>
 
@@ -165,228 +163,257 @@
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
       // ---------- Storage ----------
-      const LS_INV = "wsc_inventory_v3";
-      const LS_PLANS = "wsc_plans_v3";
+      const LS_INV = "wsc_inventory_v4";
+      const LS_PLANS = "wsc_plans_v4";
 
-      function loadInv() { try { return JSON.parse(localStorage.getItem(LS_INV) || "{}"); } catch { return {}; } }
-      function saveInv(inv) { localStorage.setItem(LS_INV, JSON.stringify(inv)); }
-      function loadPlans() { try { return JSON.parse(localStorage.getItem(LS_PLANS) || "[]"); } catch { return []; } }
-      function savePlans(plans) { localStorage.setItem(LS_PLANS, JSON.stringify(plans)); }
+      function loadInv(){ try { return JSON.parse(localStorage.getItem(LS_INV) || "{}"); } catch { return {}; } }
+      function saveInv(inv){ localStorage.setItem(LS_INV, JSON.stringify(inv)); }
+      function loadPlans(){ try { return JSON.parse(localStorage.getItem(LS_PLANS) || "[]"); } catch { return []; } }
+      function savePlans(plans){ localStorage.setItem(LS_PLANS, JSON.stringify(plans)); }
 
-      function normalizeInv(inv) {
+      function normalizeInv(inv){
         for (const p of Object.keys(inv)) {
           inv[p] = (inv[p] || [])
-            .filter((x) => Number(x.len) > 0 && Number(x.qty) > 0)
-            .map((x) => ({ len: Math.round(Number(x.len)), qty: Math.round(Number(x.qty)) }))
-            .sort((a, b) => b.len - a.len);
+            .filter(x => Number(x.len) > 0 && Number(x.qty) > 0)
+            .map(x => ({ len: Math.round(Number(x.len)), qty: Math.round(Number(x.qty)) }))
+            .sort((a,b)=> b.len - a.len);
         }
         return inv;
       }
 
-      function addBar(profile, len, qty = 1) {
+      function addBar(profile, len, qty=1){
         profile = (profile || "").trim();
         if (!profile) return;
         len = Math.round(Number(len));
         qty = Math.round(Number(qty));
-        if (!(len > 0 && qty > 0)) return;
+        if (!(len>0 && qty>0)) return;
 
         const inv = normalizeInv(loadInv());
         inv[profile] = inv[profile] || [];
-        const ex = inv[profile].find((x) => x.len === len);
+        const ex = inv[profile].find(x => x.len === len);
         if (ex) ex.qty += qty;
         else inv[profile].push({ len, qty });
         saveInv(normalizeInv(inv));
       }
 
-      function removeBar(profile, len, qty = 1) {
+      function removeBar(profile, len, qty=1){
         const inv = normalizeInv(loadInv());
         if (!inv[profile]) return;
-        const it = inv[profile].find((x) => x.len === len);
+        const it = inv[profile].find(x => x.len === len);
         if (!it) return;
         it.qty -= qty;
-        inv[profile] = inv[profile].filter((x) => x.qty > 0);
+        inv[profile] = inv[profile].filter(x => x.qty > 0);
         saveInv(normalizeInv(inv));
       }
 
-      function snapshot(profile) {
+      function snapshot(profile){
         const inv = normalizeInv(loadInv());
         const items = inv[profile] || [];
         if (!items.length) return "No stock saved for this profile.";
-        return items.map((x) => `${x.len} mm  ×  ${x.qty}`).join("\n");
+        return items.map(x => `${x.len} mm  ×  ${x.qty}`).join("\n");
       }
 
-      function parseLengths(text) {
+      function parseLengths(text){
         return (text || "")
-          .replace(/,/g, " ")
+          .replace(/,/g," ")
           .split(/\s+/)
-          .map((s) => s.trim())
+          .map(s => s.trim())
           .filter(Boolean)
           .map(Number)
-          .filter((n) => Number.isFinite(n) && n > 0)
-          .map((n) => Math.round(n));
+          .filter(n => Number.isFinite(n) && n > 0)
+          .map(n => Math.round(n));
       }
 
-      // ---------- Cutting / Welding Plan ----------
-      // For each required length L:
-      // 1) try 1 stock bar (>= L)
-      // 2) else try weld using 2 stock bars (a + b >= L)
-      // 3) else use 1 new full bar (stockLen)
-      //
-      // NOTE: This assumes welding can combine up to 2 pieces into one required length.
+      // ---------- Planner ----------
+      // Goal:
+      // - Pack multiple cuts into bars (like cutting lists)
+      // - Use stock bars first (best-fit)
+      // - If a cut doesn't fit in any single bar, allow welding by splitting across 2 bars max
       function makePlan({ stockLen, profile, cuts }) {
         const inv = normalizeInv(loadInv());
 
-        // expand stock bars into a list
-        const stock = [];
-        for (const it of inv[profile] || []) {
-          for (let i = 0; i < it.qty; i++) stock.push(it.len);
-        }
-        stock.sort((a, b) => b - a); // largest first
-
-        // process cuts largest-first (usually better)
-        const need = [...cuts].sort((a, b) => b - a);
-
-        const items = [];
-
-        for (const L of need) {
-          if (L <= 0) continue;
-          if (L > stockLen) {
-            return { ok: false, error: `Required length ${L} is bigger than Stock Length ${stockLen}.` };
+        // Build bins from inventory first
+        const bins = [];
+        let stockIdx = 0;
+        for (const it of (inv[profile] || [])) {
+          for (let i=0;i<it.qty;i++){
+            stockIdx++;
+            bins.push({
+              id: `STOCK-${stockIdx}`,
+              source: "inventory",
+              baseLen: it.len,
+              remaining: it.len,
+              segs: [] // {pieceNo, part, len, welded}
+            });
           }
+        }
 
-          // 1) single stock bar
-          let bestSingleIdx = -1;
-          let bestSingleLen = Infinity;
-          for (let i = 0; i < stock.length; i++) {
-            if (stock[i] >= L && stock[i] < bestSingleLen) {
-              bestSingleLen = stock[i];
-              bestSingleIdx = i;
+        let newIdx = 0;
+        function addNewBin(){
+          newIdx++;
+          const b = { id:`NEW-${newIdx}`, source:"new", baseLen: stockLen, remaining: stockLen, segs: [] };
+          bins.push(b);
+          return b;
+        }
+
+        const need = [...cuts].sort((a,b)=>b-a); // large->small helps packing
+        let pieceNo = 0;
+        let welds = 0;
+
+        // Best-fit bin for whole cut: choose smallest leftover after placement
+        function bestFitWhole(L){
+          let best = null;
+          for (const b of bins) {
+            if (b.remaining >= L) {
+              const after = b.remaining - L;
+              if (!best || after < best.after) best = { b, after };
             }
           }
-          if (bestSingleIdx !== -1) {
-            const bar = stock[bestSingleIdx];
-            stock.splice(bestSingleIdx, 1);
-            items.push({
-              length: L,
-              type: "stock",
-              barsUsed: [bar],
-              cutsFromBars: [L],
-              leftovers: [bar - L],
-            });
-            continue;
-          }
+          return best ? best.b : null;
+        }
 
-          // 2) weld from 2 stock bars: choose pair with minimal waste
-          let bestPair = null; // {i,j,a,b,waste,secondCut}
-          for (let i = 0; i < stock.length; i++) {
-            for (let j = i + 1; j < stock.length; j++) {
-              const a = stock[i], b = stock[j];
-              if (a + b >= L) {
-                const waste = (a + b) - L;
-                // we will use all of a (piece1 = a), and cut (L-a) from b
-                const secondCut = Math.max(0, L - a);
-                if (secondCut > b) continue; // safety
-                if (!bestPair || waste < bestPair.waste) {
-                  bestPair = { i, j, a, b, waste, secondCut };
-                }
+        // Find best weld split across 2 bins (or bin + new)
+        function bestSplit(L){
+          let best = null;
+
+          for (let i=0;i<bins.length;i++){
+            const b1 = bins[i];
+            if (b1.remaining <= 0) continue;
+            if (b1.remaining >= L) continue; // whole is handled elsewhere
+
+            // take as much as possible from b1 (so we don't leave tiny scrap in b1)
+            const take1 = b1.remaining;
+            const need2 = L - take1;
+            if (need2 <= 0) continue;
+
+            // find best existing b2
+            let b2best = null;
+            let b2after = Infinity;
+            for (let j=0;j<bins.length;j++){
+              if (j===i) continue;
+              const b2 = bins[j];
+              if (b2.remaining >= need2) {
+                const after = b2.remaining - need2;
+                if (after < b2after) { b2after = after; b2best = b2; }
               }
             }
+
+            // compare with using new bar as b2
+            if (need2 > stockLen) continue;
+            const newAfter = stockLen - need2;
+
+            let chosenB2 = b2best;
+            let chosenAfter = b2best ? b2after : Infinity;
+            let willCreateNew = false;
+
+            if (!b2best || newAfter < chosenAfter) {
+              willCreateNew = true;
+              chosenB2 = null;
+              chosenAfter = newAfter;
+            }
+
+            // leftover in b1 after take1 becomes 0
+            const totalWasteAfter = 0 + chosenAfter;
+
+            if (!best || totalWasteAfter < best.totalWasteAfter) {
+              best = { b1, take1, need2, chosenB2, willCreateNew, totalWasteAfter };
+            }
           }
 
-          if (bestPair) {
-            const { i, j, a, b, secondCut } = bestPair;
+          return best;
+        }
 
-            // remove two bars from stock (remove bigger index first)
-            stock.splice(j, 1);
-            stock.splice(i, 1);
+        for (const L of need) {
+          pieceNo++;
 
-            const leftoverA = 0; // we "use" full a as first piece
-            const leftoverB = b - secondCut;
+          if (L > stockLen) {
+            return { ok:false, error:`Required length ${L} > Stock Length ${stockLen}.` };
+          }
 
-            items.push({
-              length: L,
-              type: "weld",
-              barsUsed: [a, b],
-              cutsFromBars: [a, secondCut], // piece1=a, piece2=secondCut (welded together)
-              leftovers: [leftoverA, leftoverB],
-            });
+          // 1) whole in existing bin
+          let b = bestFitWhole(L);
+          if (b) {
+            b.segs.push({ pieceNo, part:"", len:L, welded:false });
+            b.remaining -= L;
             continue;
           }
 
-          // 3) new bar
-          items.push({
-            length: L,
-            type: "new",
-            barsUsed: [stockLen],
-            cutsFromBars: [L],
-            leftovers: [stockLen - L],
-          });
+          // 2) weld split across two bins
+          const split = bestSplit(L);
+          if (split) {
+            const { b1, take1, need2, chosenB2, willCreateNew } = split;
+            const b2 = willCreateNew ? addNewBin() : chosenB2;
+
+            b1.segs.push({ pieceNo, part:"A", len:take1, welded:true });
+            b1.remaining -= take1; // becomes 0
+
+            b2.segs.push({ pieceNo, part:"B", len:need2, welded:true });
+            b2.remaining -= need2;
+
+            welds++;
+            continue;
+          }
+
+          // 3) new bar whole
+          const nb = addNewBin();
+          nb.segs.push({ pieceNo, part:"", len:L, welded:false });
+          nb.remaining -= L;
         }
 
-        // summary
-        const totalWaste = items.reduce((s, it) => s + it.leftovers.reduce((x, y) => x + y, 0), 0);
-        const weldCount = items.filter(it => it.type === "weld").length;
-        const newCount = items.filter(it => it.type === "new").length;
+        const usedBins = bins.filter(b => b.segs.length > 0);
+        const totalWaste = usedBins.reduce((s,b)=>s+b.remaining,0);
+        const newBars = usedBins.filter(b=>b.source==="new").length;
+        const stockBarsUsed = usedBins.filter(b=>b.source==="inventory").length;
 
         return {
-          ok: true,
+          ok:true,
           profile,
           stockLen,
-          items,
-          summary: { totalWaste, weldCount, newCount, pieceCount: items.length }
+          bins: usedBins,
+          summary: { pieces: need.length, welds, newBars, stockBarsUsed, totalWaste }
         };
       }
 
-      function formatPlan(plan) {
+      function formatPlan(plan){
         if (!plan.ok) return `❌ ${plan.error}`;
 
         const out = [];
         out.push(`Profile: ${plan.profile}`);
-        out.push(`Pieces: ${plan.summary.pieceCount} | Welds: ${plan.summary.weldCount} | New bars: ${plan.summary.newCount}`);
+        out.push(`Pieces: ${plan.summary.pieces} | Welds: ${plan.summary.welds} | Stock bars used: ${plan.summary.stockBarsUsed} | New bars: ${plan.summary.newBars}`);
         out.push(`Total waste (leftovers): ${plan.summary.totalWaste} mm`);
         out.push("");
 
-        for (const it of plan.items) {
-          if (it.type === "stock") {
-            out.push(`✔ ${it.length} mm from STOCK ${it.barsUsed[0]} → leftover ${it.leftovers[0]} mm`);
-          } else if (it.type === "weld") {
-            out.push(`🔥 ${it.length} mm WELD using STOCK bars ${it.barsUsed[0]} + ${it.barsUsed[1]}`);
-            out.push(`   pieces: ${it.cutsFromBars[0]} + ${it.cutsFromBars[1]} (weld)`);
-            const keep = it.leftovers.filter(x => x > 0);
-            out.push(`   leftovers kept: ${keep.length ? keep.join(", ") + " mm" : "none"}`);
-          } else {
-            out.push(`🆕 ${it.length} mm from NEW ${it.barsUsed[0]} → leftover ${it.leftovers[0]} mm`);
-          }
+        for (const b of plan.bins) {
+          const used = b.baseLen - b.remaining;
+          out.push(`${b.id}  (${b.source==="inventory" ? "STOCK" : "NEW"} ${b.baseLen} mm)`);
+          out.push(`  Used: ${used} mm | Leftover: ${b.remaining} mm`);
+          const cutsLine = b.segs
+            .map(s => s.welded ? `P${s.pieceNo}${s.part}:${s.len}🔥` : `P${s.pieceNo}:${s.len}`)
+            .join(" + ");
+          out.push(`  Cuts: ${cutsLine}`);
+          out.push("");
         }
 
+        out.push("Legend: P# = piece number, 🔥 = welded piece (split across 2 bars).");
         return out.join("\n");
       }
 
-      function applyPlan(plan) {
-        if (!plan.ok) return { ok: false, error: plan.error };
+      function applyPlan(plan){
+        if (!plan.ok) return { ok:false, error: plan.error };
 
-        // consume bars used from stock for stock/weld items
-        for (const it of plan.items) {
-          if (it.type === "stock" || it.type === "weld") {
-            for (const b of it.barsUsed) removeBar(plan.profile, b, 1);
-          }
-          // add leftovers back as offcuts
-          for (const l of it.leftovers) {
-            if (l > 0) addBar(plan.profile, l, 1);
-          }
+        // For each used bin:
+        // - if inventory: consume that bar
+        // - add leftover back as offcut
+        for (const b of plan.bins) {
+          if (b.source === "inventory") removeBar(plan.profile, b.baseLen, 1);
+          if (b.remaining > 0) addBar(plan.profile, b.remaining, 1);
         }
 
-        // save in history
         const plans = loadPlans();
-        plans.unshift({
-          ts: new Date().toISOString(),
-          profile: plan.profile,
-          summary: plan.summary,
-          items: plan.items
-        });
-        savePlans(plans.slice(0, 50));
+        plans.unshift({ ts: new Date().toISOString(), profile: plan.profile, summary: plan.summary, bins: plan.bins });
+        savePlans(plans.slice(0,50));
 
-        return { ok: true };
+        return { ok:true };
       }
 
       // ---------- UI ----------
@@ -397,31 +424,29 @@
         plans: document.getElementById("screen-plans"),
       };
 
-      tabs.forEach((t) =>
-        t.addEventListener("click", () => {
-          tabs.forEach((x) => x.classList.toggle("active", x === t));
-          const s = t.dataset.screen;
-          Object.keys(screens).forEach((k) => (screens[k].style.display = k === s ? "" : "none"));
-          if (s === "stock") renderStockTable();
-          if (s === "plans") renderPlans();
-          if (s === "calc") refreshInvSnap();
-        })
-      );
+      tabs.forEach(t => t.addEventListener("click", () => {
+        tabs.forEach(x => x.classList.toggle("active", x===t));
+        const s = t.dataset.screen;
+        Object.keys(screens).forEach(k => screens[k].style.display = (k===s ? "" : "none"));
+        if (s === "stock") renderStockTable();
+        if (s === "plans") renderPlans();
+        if (s === "calc") refreshInvSnap();
+      }));
 
       // calc
       const elStockLen = document.getElementById("stockLen");
-      const elProfile = document.getElementById("profile");
-      const elLengths = document.getElementById("lengths");
-      const elResult = document.getElementById("result");
-      const elInvSnap = document.getElementById("invSnap");
+      const elProfile  = document.getElementById("profile");
+      const elLengths  = document.getElementById("lengths");
+      const elResult   = document.getElementById("result");
+      const elInvSnap  = document.getElementById("invSnap");
 
-      const btnCalc = document.getElementById("btnCalc");
+      const btnCalc  = document.getElementById("btnCalc");
       const btnApply = document.getElementById("btnApply");
       const btnClear = document.getElementById("btnClear");
 
       let lastPlan = null;
 
-      function refreshInvSnap() {
+      function refreshInvSnap(){
         const p = (elProfile.value || "").trim();
         elInvSnap.textContent = p ? snapshot(p) : "—";
       }
@@ -469,15 +494,14 @@
       const btnImport = document.getElementById("btnImport");
       const importFile = document.getElementById("importFile");
 
-      function renderStockTable() {
+      function renderStockTable(){
         const inv = normalizeInv(loadInv());
         stockTableBody.innerHTML = "";
         const rows = [];
         for (const p of Object.keys(inv))
-          for (const it of inv[p]) rows.push({ profile: p, len: it.len, qty: it.qty });
+          for (const it of inv[p]) rows.push({ profile:p, len:it.len, qty:it.qty });
 
-        // profile A-Z, length big->small
-        rows.sort((a, b) => a.profile.localeCompare(b.profile) || (b.len - a.len));
+        rows.sort((a,b) => a.profile.localeCompare(b.profile) || (b.len - a.len));
 
         for (const r of rows) {
           const tr = document.createElement("tr");
@@ -488,7 +512,7 @@
             <td><button class="btn" data-action="del">Delete</button></td>
           `;
 
-          tr.querySelectorAll("input").forEach((inp) => {
+          tr.querySelectorAll("input").forEach(inp => {
             inp.addEventListener("change", () => {
               const newP = tr.querySelector('input[data-k="profile"]').value.trim();
               const newL = Math.round(Number(tr.querySelector('input[data-k="len"]').value));
@@ -548,12 +572,12 @@
         const f = importFile.files?.[0];
         if (!f) return;
         const text = await f.text();
-        const lines = text.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+        const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
         const start = lines[0].toLowerCase().includes("profile") ? 1 : 0;
-        for (let i = start; i < lines.length; i++) {
-          const [p, l, q] = lines[i].split(",").map((x) => x.trim());
+        for (let i=start;i<lines.length;i++){
+          const [p,l,q] = lines[i].split(",").map(x => x.trim());
           const len = Number(l), qty = Number(q || 1);
-          if (p && len > 0 && qty > 0) addBar(p, len, qty);
+          if (p && len>0 && qty>0) addBar(p, len, qty);
         }
         renderStockTable();
         refreshInvSnap();
@@ -565,11 +589,11 @@
       const btnRefreshPlans = document.getElementById("btnRefreshPlans");
       const btnClearPlans = document.getElementById("btnClearPlans");
 
-      function renderPlans() {
+      function renderPlans(){
         const plans = loadPlans();
         if (!plans.length) { plansOut.textContent = "No saved plans yet."; return; }
         plansOut.textContent = plans
-          .map((p) => `${p.ts} | ${p.profile} | pieces: ${p.summary.pieceCount} | welds: ${p.summary.weldCount} | new: ${p.summary.newCount} | waste: ${p.summary.totalWaste} mm`)
+          .map(p => `${p.ts} | ${p.profile} | pieces:${p.summary.pieces} | welds:${p.summary.welds} | stockBars:${p.summary.stockBarsUsed} | newBars:${p.summary.newBars} | waste:${p.summary.totalWaste}mm`)
           .join("\n");
       }
       btnRefreshPlans.addEventListener("click", renderPlans);
