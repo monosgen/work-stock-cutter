@@ -50,6 +50,10 @@
     <main>
       <!-- CALCULATE -->
       <section id="screen-calc">
+        <div class="muted" id="ver" style="text-align:center; padding:8px 0;">
+  Version: —
+</div>
+
         <div class="card">
           <div class="row cols2">
             <div>
@@ -161,6 +165,9 @@
     <script>
       // ---------- PWA ----------
       if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
+const APP_VERSION = "v6"; // MUST match service-worker cache version
+const verEl = document.getElementById("ver");
+if (verEl) verEl.textContent = `Version: ${APP_VERSION}`;
 
       // ---------- Storage ----------
       const LS_INV = "wsc_inventory_v4";
