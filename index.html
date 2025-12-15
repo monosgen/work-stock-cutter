@@ -45,7 +45,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 <main>
 
 <section id="calc">
-  <div class="muted" style="text-align:center">Version: v6.4</div>
+  <div class="muted" style="text-align:center">Version: v6.5</div>
 
   <div class="card">
     <label>Stock Length (mm)</label>
@@ -58,7 +58,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     <input id="stockTrim" type="number" value="10" min="0" max="200">
 
     <label>Lengths (mm)</label>
-    <textarea id="lengths" placeholder="5000 7540 4120"></textarea>
+    <textarea id="lengths" placeholder="4510 8451 1412 5452 5615"></textarea>
 
     <div class="actions">
       <button class="btn primary" id="calcBtn">Make cut plan</button>
@@ -82,7 +82,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     <input id="stockProfile" value="100/4">
 
     <label>Add stock length (mm)</label>
-    <input id="stockAdd" type="number" placeholder="e.g. 4514">
+    <input id="stockAdd" type="number" placeholder="e.g. 4814">
 
     <div class="actions">
       <button class="btn primary" id="addStock">Add stock</button>
@@ -91,7 +91,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     </div>
 
     <div class="muted" style="margin-top:8px">
-      Tip: save leftovers/offcuts here. Trim will be applied during planning.
+      Save leftovers/offcuts here. Trim is applied during planning.
     </div>
   </div>
 
@@ -108,14 +108,21 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
 // Storage
-const LS = "wsc_stock_v6_4";
+const LS = "wsc_stock_v6_5";
 function loadAll(){ try { return JSON.parse(localStorage.getItem(LS)||"{}"); } catch { return {}; } }
 function saveAll(v){ localStorage.setItem(LS, JSON.stringify(v)); }
 function getStock(p){ return (loadAll()[p] || []).slice(); }
 function setStock(p,a){ const s=loadAll(); s[p]=a; saveAll(s); }
 
 function parseLengths(t){
-  return (t||"").replace(/,/g," ").split(/\s+/).map(x=>x.trim()).filter(Boolean).map(Number).filter(n=>Number.isFinite(n)&&n>0).map(n=>Math.round(n));
+  return (t||"")
+    .replace(/,/g," ")
+    .split(/\s+/)
+    .map(x=>x.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter(n=>Number.isFinite(n) && n>0)
+    .map(n=>Math.round(n));
 }
 
 function refreshStock(){
@@ -124,35 +131,42 @@ function refreshStock(){
   stockView.textContent = a.length ? a.map(x=>x+" mm").join("\n") : "No stock";
 }
 
-// Planner
-// bins = stock/offcuts + new bars
-// stock/offcuts have usable length = base - trim
+// Planner (keeps internal ids for ordering, prints only lengths)
 function makePlan(stockLen, profile, needs, trim){
   const stockBars = getStock(profile).sort((a,b)=>b-a);
 
+  // bins store internal id + printLen (no # in printLen)
   const bins = stockBars.map((len, idx) => ({
     kind: "STOCK",
     base: len,
     rem: Math.max(0, len - trim),
-    label: `${len}#${idx+1}` // show which physical stock piece
+    id: `STOCK-${idx+1}`,     // internal
+    printLen: len             // shown in ( )
   }));
 
   let newCount = 0;
   function newBin(){
     newCount++;
-    const b = { kind:"NEW", base: stockLen, rem: stockLen, label: `${stockLen}#${newCount}` };
+    const b = {
+      kind:"NEW",
+      base: stockLen,
+      rem: stockLen,
+      id: `NEW-${newCount}`,  // internal
+      printLen: stockLen      // shown in ( )
+    };
     bins.push(b);
     return b;
   }
 
   const results = [];
+  let seq = 0;
 
   for (const need of needs){
     if (need > stockLen){
       return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
     }
 
-    // Whole fit: best-fit by smallest leftover after cut
+    // Whole fit: best-fit across ALL existing bins first (stock+already-open new)
     let best = null;
     for (const b of bins){
       if (b.rem >= need){
@@ -163,20 +177,27 @@ function makePlan(stockLen, profile, needs, trim){
 
     if (best){
       best.b.rem -= need;
-      results.push({ need, welded:false, parts:[{ cut: need, srcLabel: best.b.label }] });
+      seq++;
+      results.push({
+        need,
+        welded:false,
+        seq,
+        mainId: best.b.id,
+        parts:[{ cut: need, fromId: best.b.id, fromLen: best.b.printLen }]
+      });
       continue;
     }
 
-    // Weld (max 2 bars):
-    // pick a donor b1 with 0<rem<need, use it fully, take rest from best-fit b2 or new
+    // Weld: use up one partially-usable bin then finish from another bin or a new bar
     let bestSplit = null;
 
     for (const b1 of bins){
       if (!(b1.rem > 0 && b1.rem < need)) continue;
+
       const take1 = b1.rem;
       const need2 = need - take1;
 
-      // choose b2 best-fit
+      // best-fit b2 (existing)
       let b2 = null;
       let b2after = Infinity;
       for (const b of bins){
@@ -187,7 +208,7 @@ function makePlan(stockLen, profile, needs, trim){
         }
       }
 
-      // or choose new bar
+      // compare to opening a new bar
       const newAfter = stockLen - need2;
       const chooseNew = (!b2) || (newAfter < b2after);
       const afterWaste = chooseNew ? newAfter : b2after;
@@ -204,36 +225,63 @@ function makePlan(stockLen, profile, needs, trim){
       b1.rem = 0;
       b2real.rem -= need2;
 
+      seq++;
+      // mainId: prefer the bar you keep on the machine (NEW bar if involved, else b1)
+      const mainId = (b2real.kind === "NEW") ? b2real.id : b1.id;
+
       results.push({
         need,
-        welded: true,
-        parts: [
-          { cut: take1, srcLabel: b1.label },
-          { cut: need2, srcLabel: b2real.label }
+        welded:true,
+        seq,
+        mainId,
+        parts:[
+          { cut: take1, fromId: b1.id, fromLen: b1.printLen },
+          { cut: need2, fromId: b2real.id, fromLen: b2real.printLen }
         ]
       });
       continue;
     }
 
-    // Otherwise: new bar
+    // Otherwise open one new bar and cut from it
     const nb = newBin();
     nb.rem -= need;
-    results.push({ need, welded:false, parts:[{ cut: need, srcLabel: nb.label }] });
+
+    seq++;
+    results.push({
+      need,
+      welded:false,
+      seq,
+      mainId: nb.id,
+      parts:[{ cut: need, fromId: nb.id, fromLen: nb.printLen }]
+    });
   }
 
   const totalLeftoverUsable = bins.reduce((s,b)=>s + b.rem, 0);
   return { ok:true, plan:{ results, totalLeftoverUsable, trim } };
 }
 
-// Output (compact, clear, shows which bar label like 11900#1 or 4514#2)
+// Output formatting:
+// - non-weld first
+// - welded last
+// - group by mainId (keeps same 11900 together)
+// - then by seq
 function format(plan){
   const out = [];
   out.push("=== WHAT TO USE ===\n");
 
-  for (const r of plan.results){
-    const head = `${r.need}${r.welded ? " 🔥" : ""} = `;
-    const parts = r.parts.map(p => `${p.cut}(${p.srcLabel})`).join(" + ");
-    out.push(head + parts);
+  const lines = [...plan.results].sort((a,b) => {
+    if (a.welded !== b.welded) return a.welded ? 1 : -1;     // welded last
+    if (a.mainId !== b.mainId) return a.mainId.localeCompare(b.mainId); // group by bar
+    return a.seq - b.seq;
+  });
+
+  for (const r of lines){
+    if (!r.welded){
+      out.push(`${r.need} = ${r.need} (${r.parts[0].fromLen})`);
+    } else {
+      const partsTxt = r.parts.map(p => `${p.cut} (${p.fromLen})`).join(" + ");
+      out.push(`${r.need} 🔥 = ${partsTxt}`);
+    }
   }
 
   out.push(`\nLeftover saved (usable): ${plan.totalLeftoverUsable} mm`);
