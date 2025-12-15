@@ -1,4 +1,4 @@
-const CACHE = "wsc-cache-v6.3";
+const CACHE = "wsc-cache-v6.4";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./service-worker.js"];
 
 self.addEventListener("install", (e) => {
