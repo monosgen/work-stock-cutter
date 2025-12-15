@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,7 +6,6 @@
   <title>Work Stock Cutter</title>
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#111111" />
-
   <style>
     :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
     body { margin:0; background:#0b0b0c; color:#f3f3f4; }
@@ -20,9 +18,8 @@
     .card { background:#121214; border:1px solid #222; border-radius:16px; padding:14px; margin:12px 0; }
     label { font-size:12px; color:#cfcfd6; display:block; margin:10px 0 6px; }
     input, textarea {
-      width:100%; padding:10px 12px; border-radius:12px;
-      border:1px solid #2a2a2a; background:#0f0f10; color:#f3f3f4;
-      box-sizing:border-box;
+      width:100%; padding:10px 12px; border-radius:12px; border:1px solid #2a2a2a;
+      background:#0f0f10; color:#f3f3f4; box-sizing:border-box;
     }
     textarea { min-height:110px; resize:vertical; }
     .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
@@ -44,7 +41,6 @@
 </header>
 
 <main>
-  <!-- CALC -->
   <section id="screen-calc">
     <div class="muted" id="ver" style="text-align:center; padding:6px 0;">Version: —</div>
 
@@ -56,7 +52,7 @@
       <input id="profile" value="100/4" />
 
       <label>Lengths (mm) — space/newline/comma separated</label>
-      <textarea id="lengths" placeholder="40000 4394 3742 4488"></textarea>
+      <textarea id="lengths" placeholder="5000 7363 8273 5241 2523"></textarea>
 
       <div class="actions">
         <button class="btn primary" id="btnCalc">Make cut plan</button>
@@ -74,14 +70,13 @@
     </div>
   </section>
 
-  <!-- STOCK -->
   <section id="screen-stock" style="display:none">
     <div class="card">
       <label>Profile</label>
       <input id="stockProfile" value="100/4" />
 
       <label>Add length (mm)</label>
-      <input id="stockAddLen" type="number" placeholder="e.g. 5427" />
+      <input id="stockAddLen" type="number" placeholder="e.g. 3637" />
 
       <div class="actions">
         <button class="btn primary" id="btnAddBar">Add bar</button>
@@ -106,46 +101,39 @@
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
   // Version label
-  const APP_VERSION = "v6.1";
+  const APP_VERSION = "v6.2";
   document.getElementById("ver").textContent = "Version: " + APP_VERSION;
 
-  // Local storage
+  // Storage (profile -> list of bar lengths)
   const LS = "wsc_stock_v6";
-  function loadAllStock() {
-    try { return JSON.parse(localStorage.getItem(LS) || "{}"); }
-    catch { return {}; }
-  }
-  function saveAllStock(s) { localStorage.setItem(LS, JSON.stringify(s)); }
+  function loadAllStock(){ try { return JSON.parse(localStorage.getItem(LS) || "{}"); } catch { return {}; } }
+  function saveAllStock(s){ localStorage.setItem(LS, JSON.stringify(s)); }
 
-  function getProfileStock(profile) {
+  function getProfileStock(profile){
     const s = loadAllStock();
     return (s[profile] || []).slice();
   }
-  function setProfileStock(profile, arr) {
+  function setProfileStock(profile, arr){
     const s = loadAllStock();
     s[profile] = arr.slice();
     saveAllStock(s);
   }
-
-  function addBar(profile, len) {
+  function addBar(profile, len){
     len = Math.round(Number(len));
     if (!(len > 0)) return;
     const arr = getProfileStock(profile);
     arr.push(len);
     setProfileStock(profile, arr);
   }
+  function clearProfileStock(profile){ setProfileStock(profile, []); }
 
-  function clearProfileStock(profile) {
-    setProfileStock(profile, []);
-  }
-
-  function formatStock(profile) {
+  function formatStock(profile){
     const arr = getProfileStock(profile).sort((a,b)=>b-a);
     if (!arr.length) return "No stock saved for this profile.";
     return arr.map((x,i)=>`${i+1}) ${x} mm`).join("\n");
   }
 
-  function parseLengths(text) {
+  function parseLengths(text){
     return (text || "")
       .replace(/,/g, " ")
       .split(/\s+/)
@@ -157,105 +145,85 @@
   }
 
   // Planner:
-  // - Build bins from current stock (as separate bars)
-  // - If needed, create NEW bars of stockLen
-  // - For each required length:
-  //   - Try fit in one bar
-  //   - Else weld using 2 bars: use up one bar + take remainder from another/new bar
-  function makePlan(stockLen, profile, requiredList) {
+  // - bins are individual bars (stock first, then new bars as needed)
+  // - for each required length:
+  //   - try fit whole into best-fit bin
+  //   - else weld using 2 bins (use up one bin + take remainder from another/new bin)
+  function makePlan(stockLen, profile, requiredList){
     const stockBars = getProfileStock(profile).sort((a,b)=>b-a);
 
     const bins = stockBars.map((len, i) => ({
       id: `STOCK-${i+1}`,
-      type: "STOCK",
       base: len,
-      rem: len
+      rem: len,
+      kind: "STOCK"
     }));
 
     let newCount = 0;
-    function newBin() {
+    function newBin(){
       newCount++;
-      const b = { id: `NEW-${newCount}`, type: "NEW", base: stockLen, rem: stockLen };
+      const b = { id:`NEW-${newCount}`, base: stockLen, rem: stockLen, kind:"NEW" };
       bins.push(b);
       return b;
     }
 
-    // For your "WHAT TO USE" display
-    // Each entry: { need, welded, parts:[{cut, fromId}] }
-    const plan = { profile, stockLen, required: [], bins };
+    // Per requirement: {need, welded, parts:[{cut, fromId}]}
+    const reqs = [];
 
-    // Process in input order (so it matches what you typed)
-    for (const need of requiredList) {
-      if (need > stockLen) {
-        return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
-      }
+    for (const need of requiredList){
+      if (need > stockLen) return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
 
-      // 1) Try whole in one bin (stock first because stock bins are earlier, and we pick best-fit)
+      // Whole fit: best-fit (min leftover after)
       let best = null;
-      for (const b of bins) {
-        if (b.rem >= need) {
+      for (const b of bins){
+        if (b.rem >= need){
           const after = b.rem - need;
           if (!best || after < best.after) best = { b, after };
         }
       }
-      if (best) {
+      if (best){
         best.b.rem -= need;
-        plan.required.push({
-          need,
-          welded: false,
-          parts: [{ cut: need, fromId: best.b.id }]
-        });
+        reqs.push({ need, welded:false, parts:[{ cut: need, fromId: best.b.id }] });
         continue;
       }
 
-      // 2) Weld using max 2 bars:
-      // choose a donor bar b1 that has some rem but < need, use it FULL,
-      // then take rest from best-fit b2 (or new bar).
+      // Weld split (max 2 bars):
+      // choose donor b1 with 0<rem<need, take1=rem (use up b1)
       let bestSplit = null;
-      for (const b1 of bins) {
-        if (b1.rem > 0 && b1.rem < need) {
-          const take1 = b1.rem;
-          const need2 = need - take1;
+      for (const b1 of bins){
+        if (!(b1.rem > 0 && b1.rem < need)) continue;
+        const take1 = b1.rem;
+        const need2 = need - take1;
 
-          // choose b2
-          let b2best = null;
-          let b2after = Infinity;
-
-          for (const b2 of bins) {
-            if (b2 === b1) continue;
-            if (b2.rem >= need2) {
-              const after = b2.rem - need2;
-              if (after < b2after) { b2after = after; b2best = b2; }
-            }
+        // choose b2 (best-fit) or new bar
+        let b2best = null;
+        let b2after = Infinity;
+        for (const b2 of bins){
+          if (b2 === b1) continue;
+          if (b2.rem >= need2){
+            const after = b2.rem - need2;
+            if (after < b2after){ b2after = after; b2best = b2; }
           }
+        }
+        const newAfter = stockLen - need2;
+        const chooseNew = !b2best || (newAfter < b2after);
+        const afterWaste = chooseNew ? newAfter : b2after;
 
-          // or create a new bar
-          const newAfter = stockLen - need2;
-
-          // compute "waste after" for comparison
-          // b1 becomes 0; b2 has after
-          const bestAfter = b2best ? b2after : Infinity;
-          const chooseNew = !b2best || (newAfter < bestAfter);
-          const afterWaste = chooseNew ? newAfter : bestAfter;
-
-          if (!bestSplit || afterWaste < bestSplit.afterWaste) {
-            bestSplit = { b1, take1, need2, b2best, chooseNew, afterWaste };
-          }
+        if (!bestSplit || afterWaste < bestSplit.afterWaste){
+          bestSplit = { b1, take1, need2, b2best, chooseNew, afterWaste };
         }
       }
 
-      if (bestSplit) {
+      if (bestSplit){
         const { b1, take1, need2, b2best, chooseNew } = bestSplit;
         const b2 = chooseNew ? newBin() : b2best;
 
-        // Use b1 FULL
         b1.rem = 0;
-        // Take need2 from b2
         b2.rem -= need2;
 
-        plan.required.push({
+        reqs.push({
           need,
-          welded: true,
+          welded:true,
           parts: [
             { cut: take1, fromId: b1.id },
             { cut: need2, fromId: b2.id }
@@ -264,45 +232,42 @@
         continue;
       }
 
-      // 3) Otherwise, must use a new bar (whole)
+      // Otherwise: new bar whole
       const nb = newBin();
       nb.rem -= need;
-      plan.required.push({
-        need,
-        welded: false,
-        parts: [{ cut: need, fromId: nb.id }]
-      });
+      reqs.push({ need, welded:false, parts:[{ cut: need, fromId: nb.id }] });
     }
 
-    return { ok:true, plan };
+    const totalLeftover = bins.reduce((s,b)=>s + b.rem, 0);
+    return { ok:true, plan:{ profile, stockLen, reqs, bins, totalLeftover } };
   }
 
-  function formatResult(planObj) {
-    const { plan } = planObj;
-
+  // ✅ CLEAN OUTPUT (1 block per required, very short)
+  function formatResult(plan){
     const out = [];
     out.push("=== WHAT TO USE ===\n");
 
-    for (const r of plan.required) {
-      out.push(`Required ${r.need} mm${r.welded ? " 🔥" : ""}`);
-      for (const p of r.parts) {
-        out.push(`${p.cut} (${p.fromId})`);
+    for (const r of plan.reqs){
+      if (r.welded){
+        // Example: "5000 🔥 = 3637(STOCK-1) + 1363(STOCK-2)"
+        const parts = r.parts.map(p => `${p.cut}(${p.fromId})`).join(" + ");
+        out.push(`${r.need} 🔥 = ${parts}`);
+      } else {
+        // Example: "2523 = 2523(NEW-2)"
+        const p = r.parts[0];
+        out.push(`${r.need} = ${p.cut}(${p.fromId})`);
       }
-      out.push(""); // blank line between pieces
     }
 
-    // Total leftover saved (sum of remaining on bins that were touched or not — simple and clear)
-    const totalLeft = plan.bins.reduce((s,b)=>s + (b.rem || 0), 0);
-    out.push(`Total leftover saved: ${totalLeft} mm`);
-
+    out.push("");
+    out.push(`Leftover saved: ${plan.totalLeftover} mm`);
     return out.join("\n");
   }
 
-  // UI
+  // Tabs
   const tabs = document.querySelectorAll("button.tab");
   const screenCalc = document.getElementById("screen-calc");
   const screenStock = document.getElementById("screen-stock");
-
   tabs.forEach(t => t.addEventListener("click", () => {
     tabs.forEach(x => x.classList.toggle("active", x === t));
     const s = t.dataset.screen;
@@ -311,23 +276,24 @@
     if (s === "stock") refreshStockView();
   }));
 
+  // UI refs
   const elStockLen = document.getElementById("stockLen");
-  const elProfile = document.getElementById("profile");
-  const elLengths = document.getElementById("lengths");
-  const elResult = document.getElementById("result");
+  const elProfile  = document.getElementById("profile");
+  const elLengths  = document.getElementById("lengths");
+  const elResult   = document.getElementById("result");
 
   const stockProfile = document.getElementById("stockProfile");
-  const stockAddLen = document.getElementById("stockAddLen");
-  const stockView = document.getElementById("stockView");
+  const stockAddLen  = document.getElementById("stockAddLen");
+  const stockView    = document.getElementById("stockView");
 
-  function refreshStockView() {
+  function refreshStockView(){
     stockView.textContent = formatStock(stockProfile.value.trim());
   }
 
   document.getElementById("btnCalc").addEventListener("click", () => {
     const stockLen = Math.round(Number(elStockLen.value));
-    const profile = elProfile.value.trim();
-    const cuts = parseLengths(elLengths.value);
+    const profile  = elProfile.value.trim();
+    const cuts     = parseLengths(elLengths.value);
 
     if (!profile) { elResult.textContent = "❌ Please enter Profile."; return; }
     if (!(stockLen > 0)) { elResult.textContent = "❌ Stock Length must be > 0."; return; }
@@ -336,7 +302,7 @@
     const res = makePlan(stockLen, profile, cuts);
     if (!res.ok) { elResult.textContent = "❌ " + res.error; return; }
 
-    elResult.textContent = formatResult(res);
+    elResult.textContent = formatResult(res.plan);
   });
 
   document.getElementById("btnClear").addEventListener("click", () => {
