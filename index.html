@@ -1,341 +1,231 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Work Stock Cutter</title>
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#111111" />
-  <style>
-    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-    body { margin:0; background:#0b0b0c; color:#f3f3f4; }
-    header { padding:14px; border-bottom:1px solid #222; position:sticky; top:0; background:#0b0b0c; z-index:10; }
-    h1 { font-size:16px; margin:0 0 10px; font-weight:700; }
-    nav { display:flex; gap:8px; }
-    button.tab { flex:1; padding:10px; border-radius:12px; border:1px solid #2a2a2a; background:#121214; color:#f3f3f4; }
-    button.tab.active { border-color:#6a6a6a; background:#17171a; }
-    main { padding:14px; max-width:900px; margin:0 auto; }
-    .card { background:#121214; border:1px solid #222; border-radius:16px; padding:14px; margin:12px 0; }
-    label { font-size:12px; color:#cfcfd6; display:block; margin:10px 0 6px; }
-    input, textarea {
-      width:100%; padding:10px 12px; border-radius:12px; border:1px solid #2a2a2a;
-      background:#0f0f10; color:#f3f3f4; box-sizing:border-box;
-    }
-    textarea { min-height:110px; resize:vertical; }
-    .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
-    .btn { padding:10px 12px; border-radius:12px; border:1px solid #2a2a2a; background:#17171a; color:#f3f3f4; cursor:pointer; }
-    .btn.primary { border-color:#6a6a6a; }
-    .muted { font-size:12px; color:#b8b8c0; }
-    .pill { display:inline-block; padding:4px 8px; border:1px solid #2a2a2a; border-radius:999px; font-size:12px; color:#d7d7de; }
-    pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:14px; white-space:pre-wrap; word-break:break-word; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Work Stock Cutter</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111111">
+
+<style>
+:root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+body { margin:0; background:#0b0b0c; color:#f3f3f4; }
+header { padding:14px; border-bottom:1px solid #222; position:sticky; top:0; background:#0b0b0c; }
+h1 { font-size:16px; margin:0 0 8px; font-weight:700; }
+nav { display:flex; gap:8px; }
+button.tab { flex:1; padding:10px; border-radius:12px; border:1px solid #2a2a2a; background:#121214; color:#f3f3f4; }
+button.tab.active { border-color:#6a6a6a; background:#17171a; }
+main { padding:14px; max-width:900px; margin:0 auto; }
+.card { background:#121214; border:1px solid #222; border-radius:16px; padding:14px; margin:12px 0; }
+label { font-size:12px; color:#cfcfd6; display:block; margin:10px 0 6px; }
+input, textarea {
+  width:100%; padding:10px 12px; border-radius:12px;
+  border:1px solid #2a2a2a; background:#0f0f10; color:#f3f3f4;
+}
+textarea { min-height:110px; resize:vertical; }
+.actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+.btn { padding:10px 12px; border-radius:12px; border:1px solid #2a2a2a; background:#17171a; color:#f3f3f4; }
+.btn.primary { border-color:#6a6a6a; }
+.muted { font-size:12px; color:#b8b8c0; }
+.pill { display:inline-block; padding:4px 8px; border:1px solid #2a2a2a; border-radius:999px; font-size:12px; }
+pre {
+  background:#0f0f10; border:1px solid #2a2a2a;
+  padding:12px; border-radius:14px;
+  white-space:pre-wrap;
+}
+</style>
 </head>
 
 <body>
+
 <header>
   <h1>Work Stock Cutter</h1>
   <nav>
-    <button class="tab active" data-screen="calc">Calculate</button>
-    <button class="tab" data-screen="stock">Stock</button>
+    <button class="tab active" data-tab="calc">Calculate</button>
+    <button class="tab" data-tab="stock">Stock</button>
   </nav>
 </header>
 
 <main>
-  <section id="screen-calc">
-    <div class="muted" id="ver" style="text-align:center; padding:6px 0;">Version: —</div>
 
-    <div class="card">
-      <label>Stock Length (mm)</label>
-      <input id="stockLen" type="number" value="11900" min="1" />
+<section id="calc">
+<div class="muted" style="text-align:center">Version: v6.3</div>
 
-      <label>Profile</label>
-      <input id="profile" value="100/4" />
+<div class="card">
+<label>Stock Length (mm)</label>
+<input id="stockLen" type="number" value="11900">
 
-      <label>Lengths (mm) — space/newline/comma separated</label>
-      <textarea id="lengths" placeholder="5000 7363 8273 5241 2523"></textarea>
+<label>Profile</label>
+<input id="profile" value="100/4">
 
-      <div class="actions">
-        <button class="btn primary" id="btnCalc">Make cut plan</button>
-        <button class="btn" id="btnClear">Clear</button>
-      </div>
+<label>Lengths (mm)</label>
+<textarea id="lengths" placeholder="7373 3000"></textarea>
 
-      <div class="muted" style="margin-top:10px">
-        Rule: stock first. If a piece doesn’t fit in one bar, it may be welded using max 2 bars.
-      </div>
-    </div>
+<div class="actions">
+<button class="btn primary" id="calcBtn">Make cut plan</button>
+<button class="btn" id="clearBtn">Clear</button>
+</div>
 
-    <div class="card">
-      <div class="pill">Result</div>
-      <pre id="result">—</pre>
-    </div>
-  </section>
+<div class="muted" style="margin-top:8px">
+Rule: stock first. If needed, weld using max 2 bars.
+</div>
+</div>
 
-  <section id="screen-stock" style="display:none">
-    <div class="card">
-      <label>Profile</label>
-      <input id="stockProfile" value="100/4" />
+<div class="card">
+<div class="pill">Result</div>
+<pre id="result">—</pre>
+</div>
+</section>
 
-      <label>Add length (mm)</label>
-      <input id="stockAddLen" type="number" placeholder="e.g. 3637" />
+<section id="stock" style="display:none">
+<div class="card">
+<label>Profile</label>
+<input id="stockProfile" value="100/4">
 
-      <div class="actions">
-        <button class="btn primary" id="btnAddBar">Add bar</button>
-        <button class="btn" id="btnAddFull">Add full (Stock Length)</button>
-        <button class="btn" id="btnClearStock">Clear this profile stock</button>
-      </div>
+<label>Add stock length (mm)</label>
+<input id="stockAdd">
 
-      <div class="muted" style="margin-top:10px">
-        Stock is saved locally on your phone (per profile).
-      </div>
-    </div>
+<div class="actions">
+<button class="btn primary" id="addStock">Add stock</button>
+<button class="btn" id="addFull">Add full bar</button>
+<button class="btn" id="clearStock">Clear profile stock</button>
+</div>
+</div>
 
-    <div class="card">
-      <div class="pill">Stock (this profile)</div>
-      <pre id="stockView">—</pre>
-    </div>
-  </section>
+<div class="card">
+<div class="pill">Stock (this profile)</div>
+<pre id="stockView">—</pre>
+</div>
+</section>
+
 </main>
 
 <script>
-  // PWA
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
+// PWA
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
-  // Version label
-  const APP_VERSION = "v6.2";
-  document.getElementById("ver").textContent = "Version: " + APP_VERSION;
+// Storage
+const LS = "wsc_stock_v6_3";
 
-  // Storage (profile -> list of bar lengths)
-  const LS = "wsc_stock_v6";
-  function loadAllStock(){ try { return JSON.parse(localStorage.getItem(LS) || "{}"); } catch { return {}; } }
-  function saveAllStock(s){ localStorage.setItem(LS, JSON.stringify(s)); }
+function loadAll(){ try { return JSON.parse(localStorage.getItem(LS)||"{}"); } catch { return {}; } }
+function saveAll(v){ localStorage.setItem(LS, JSON.stringify(v)); }
 
-  function getProfileStock(profile){
-    const s = loadAllStock();
-    return (s[profile] || []).slice();
-  }
-  function setProfileStock(profile, arr){
-    const s = loadAllStock();
-    s[profile] = arr.slice();
-    saveAllStock(s);
-  }
-  function addBar(profile, len){
-    len = Math.round(Number(len));
-    if (!(len > 0)) return;
-    const arr = getProfileStock(profile);
-    arr.push(len);
-    setProfileStock(profile, arr);
-  }
-  function clearProfileStock(profile){ setProfileStock(profile, []); }
+function getStock(p){ return (loadAll()[p] || []).slice(); }
+function setStock(p,a){ const s=loadAll(); s[p]=a; saveAll(s); }
 
-  function formatStock(profile){
-    const arr = getProfileStock(profile).sort((a,b)=>b-a);
-    if (!arr.length) return "No stock saved for this profile.";
-    return arr.map((x,i)=>`${i+1}) ${x} mm`).join("\n");
+function parseLengths(t){
+  return t.replace(/,/g," ").split(/\s+/).map(Number).filter(n=>n>0);
+}
+
+function refreshStock(){
+  const p = stockProfile.value.trim();
+  const a = getStock(p).sort((a,b)=>b-a);
+  stockView.textContent = a.length ? a.map(x=>x+" mm").join("\n") : "No stock";
+}
+
+// Planner
+function makePlan(stockLen, profile, needs){
+  let bins = getStock(profile).map(l=>({base:l, rem:l}));
+  let results = [];
+  let totalLeft = 0;
+
+  function newBin(){
+    const b={base:stockLen, rem:stockLen};
+    bins.push(b); return b;
   }
 
-  function parseLengths(text){
-    return (text || "")
-      .replace(/,/g, " ")
-      .split(/\s+/)
-      .map(x => x.trim())
-      .filter(Boolean)
-      .map(Number)
-      .filter(n => Number.isFinite(n) && n > 0)
-      .map(n => Math.round(n));
-  }
+  for(const need of needs){
+    let best = bins.filter(b=>b.rem>=need)
+      .sort((a,b)=>(a.rem-need)-(b.rem-need))[0];
 
-  // Planner:
-  // - bins are individual bars (stock first, then new bars as needed)
-  // - for each required length:
-  //   - try fit whole into best-fit bin
-  //   - else weld using 2 bins (use up one bin + take remainder from another/new bin)
-  function makePlan(stockLen, profile, requiredList){
-    const stockBars = getProfileStock(profile).sort((a,b)=>b-a);
-
-    const bins = stockBars.map((len, i) => ({
-      id: `STOCK-${i+1}`,
-      base: len,
-      rem: len,
-      kind: "STOCK"
-    }));
-
-    let newCount = 0;
-    function newBin(){
-      newCount++;
-      const b = { id:`NEW-${newCount}`, base: stockLen, rem: stockLen, kind:"NEW" };
-      bins.push(b);
-      return b;
+    if(best){
+      best.rem -= need;
+      results.push({need, welded:false, parts:[{cut:need, src:best.base}]});
+      continue;
     }
 
-    // Per requirement: {need, welded, parts:[{cut, fromId}]}
-    const reqs = [];
-
-    for (const need of requiredList){
-      if (need > stockLen) return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
-
-      // Whole fit: best-fit (min leftover after)
-      let best = null;
-      for (const b of bins){
-        if (b.rem >= need){
-          const after = b.rem - need;
-          if (!best || after < best.after) best = { b, after };
-        }
-      }
-      if (best){
-        best.b.rem -= need;
-        reqs.push({ need, welded:false, parts:[{ cut: need, fromId: best.b.id }] });
-        continue;
-      }
-
-      // Weld split (max 2 bars):
-      // choose donor b1 with 0<rem<need, take1=rem (use up b1)
-      let bestSplit = null;
-      for (const b1 of bins){
-        if (!(b1.rem > 0 && b1.rem < need)) continue;
-        const take1 = b1.rem;
-        const need2 = need - take1;
-
-        // choose b2 (best-fit) or new bar
-        let b2best = null;
-        let b2after = Infinity;
-        for (const b2 of bins){
-          if (b2 === b1) continue;
-          if (b2.rem >= need2){
-            const after = b2.rem - need2;
-            if (after < b2after){ b2after = after; b2best = b2; }
-          }
-        }
-        const newAfter = stockLen - need2;
-        const chooseNew = !b2best || (newAfter < b2after);
-        const afterWaste = chooseNew ? newAfter : b2after;
-
-        if (!bestSplit || afterWaste < bestSplit.afterWaste){
-          bestSplit = { b1, take1, need2, b2best, chooseNew, afterWaste };
-        }
-      }
-
-      if (bestSplit){
-        const { b1, take1, need2, b2best, chooseNew } = bestSplit;
-        const b2 = chooseNew ? newBin() : b2best;
-
-        b1.rem = 0;
-        b2.rem -= need2;
-
-        reqs.push({
-          need,
-          welded:true,
-          parts: [
-            { cut: take1, fromId: b1.id },
-            { cut: need2, fromId: b2.id }
-          ]
-        });
-        continue;
-      }
-
-      // Otherwise: new bar whole
-      const nb = newBin();
-      nb.rem -= need;
-      reqs.push({ need, welded:false, parts:[{ cut: need, fromId: nb.id }] });
+    let donor = bins.find(b=>b.rem>0 && b.rem<need);
+    if(donor){
+      let take1 = donor.rem;
+      donor.rem = 0;
+      let rest = need - take1;
+      let b2 = bins.find(b=>b.rem>=rest) || newBin();
+      b2.rem -= rest;
+      results.push({
+        need, welded:true,
+        parts:[{cut:take1, src:donor.base},{cut:rest, src:b2.base}]
+      });
+      continue;
     }
 
-    const totalLeftover = bins.reduce((s,b)=>s + b.rem, 0);
-    return { ok:true, plan:{ profile, stockLen, reqs, bins, totalLeftover } };
+    let nb = newBin();
+    nb.rem -= need;
+    results.push({need, welded:false, parts:[{cut:need, src:stockLen}]});
   }
 
-  // ✅ CLEAN OUTPUT (1 block per required, very short)
-  function formatResult(plan){
-    const out = [];
-    out.push("=== WHAT TO USE ===\n");
+  totalLeft = bins.reduce((s,b)=>s+b.rem,0);
+  return {results, totalLeft};
+}
 
-    for (const r of plan.reqs){
-      if (r.welded){
-        // Example: "5000 🔥 = 3637(STOCK-1) + 1363(STOCK-2)"
-        const parts = r.parts.map(p => `${p.cut}(${p.fromId})`).join(" + ");
-        out.push(`${r.need} 🔥 = ${parts}`);
-      } else {
-        // Example: "2523 = 2523(NEW-2)"
-        const p = r.parts[0];
-        out.push(`${r.need} = ${p.cut}(${p.fromId})`);
-      }
+// Output
+function format(plan){
+  let out=["=== WHAT TO USE ===\n"];
+  for(const r of plan.results){
+    if(r.welded){
+      out.push(`${r.need} 🔥 = ` + r.parts.map(p=>`${p.cut}(${p.src})`).join(" + "));
+    } else {
+      out.push(`${r.need} = ${r.parts[0].cut}(${r.parts[0].src})`);
     }
-
-    out.push("");
-    out.push(`Leftover saved: ${plan.totalLeftover} mm`);
-    return out.join("\n");
   }
+  out.push(`\nLeftover saved: ${plan.totalLeft} mm`);
+  return out.join("\n");
+}
 
-  // Tabs
-  const tabs = document.querySelectorAll("button.tab");
-  const screenCalc = document.getElementById("screen-calc");
-  const screenStock = document.getElementById("screen-stock");
-  tabs.forEach(t => t.addEventListener("click", () => {
-    tabs.forEach(x => x.classList.toggle("active", x === t));
-    const s = t.dataset.screen;
-    screenCalc.style.display = (s === "calc") ? "" : "none";
-    screenStock.style.display = (s === "stock") ? "" : "none";
-    if (s === "stock") refreshStockView();
-  }));
+// UI
+const stockLen = document.getElementById("stockLen");
+const profile = document.getElementById("profile");
+const lengths = document.getElementById("lengths");
+const result = document.getElementById("result");
 
-  // UI refs
-  const elStockLen = document.getElementById("stockLen");
-  const elProfile  = document.getElementById("profile");
-  const elLengths  = document.getElementById("lengths");
-  const elResult   = document.getElementById("result");
+const stockProfile = document.getElementById("stockProfile");
+const stockAdd = document.getElementById("stockAdd");
+const stockView = document.getElementById("stockView");
 
-  const stockProfile = document.getElementById("stockProfile");
-  const stockAddLen  = document.getElementById("stockAddLen");
-  const stockView    = document.getElementById("stockView");
+document.getElementById("calcBtn").onclick = ()=>{
+  const needs = parseLengths(lengths.value);
+  if(!needs.length) return;
+  const plan = makePlan(+stockLen.value, profile.value.trim(), needs);
+  result.textContent = format(plan);
+};
 
-  function refreshStockView(){
-    stockView.textContent = formatStock(stockProfile.value.trim());
-  }
+document.getElementById("clearBtn").onclick = ()=>{ lengths.value=""; result.textContent="—"; };
 
-  document.getElementById("btnCalc").addEventListener("click", () => {
-    const stockLen = Math.round(Number(elStockLen.value));
-    const profile  = elProfile.value.trim();
-    const cuts     = parseLengths(elLengths.value);
+document.getElementById("addStock").onclick = ()=>{
+  const p=stockProfile.value.trim(); const v=+stockAdd.value;
+  if(p && v>0){ const a=getStock(p); a.push(v); setStock(p,a); stockAdd.value=""; refreshStock(); }
+};
 
-    if (!profile) { elResult.textContent = "❌ Please enter Profile."; return; }
-    if (!(stockLen > 0)) { elResult.textContent = "❌ Stock Length must be > 0."; return; }
-    if (!cuts.length) { elResult.textContent = "❌ Enter at least one required length."; return; }
+document.getElementById("addFull").onclick = ()=>{
+  const p=stockProfile.value.trim();
+  const a=getStock(p); a.push(+stockLen.value); setStock(p,a); refreshStock();
+};
 
-    const res = makePlan(stockLen, profile, cuts);
-    if (!res.ok) { elResult.textContent = "❌ " + res.error; return; }
+document.getElementById("clearStock").onclick = ()=>{
+  setStock(stockProfile.value.trim(),[]); refreshStock();
+};
 
-    elResult.textContent = formatResult(res.plan);
-  });
+document.querySelectorAll(".tab").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("calc").style.display=b.dataset.tab==="calc"?"":"none";
+    document.getElementById("stock").style.display=b.dataset.tab==="stock"?"":"none";
+    refreshStock();
+  };
+});
 
-  document.getElementById("btnClear").addEventListener("click", () => {
-    elLengths.value = "";
-    elResult.textContent = "—";
-  });
-
-  document.getElementById("btnAddBar").addEventListener("click", () => {
-    const p = stockProfile.value.trim();
-    const l = Number(stockAddLen.value);
-    if (!p || !(l > 0)) return;
-    addBar(p, l);
-    stockAddLen.value = "";
-    refreshStockView();
-  });
-
-  document.getElementById("btnAddFull").addEventListener("click", () => {
-    const p = stockProfile.value.trim();
-    const l = Math.round(Number(elStockLen.value || 11900));
-    if (!p || !(l > 0)) return;
-    addBar(p, l);
-    refreshStockView();
-  });
-
-  document.getElementById("btnClearStock").addEventListener("click", () => {
-    const p = stockProfile.value.trim();
-    if (!p) return;
-    clearProfileStock(p);
-    refreshStockView();
-  });
-
-  // init
-  refreshStockView();
+refreshStock();
 </script>
+
 </body>
 </html>
