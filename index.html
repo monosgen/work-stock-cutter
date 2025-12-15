@@ -1,39 +1,40 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Work Stock Cutter</title>
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#111111" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Work Stock Cutter</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#111111" />
 
-<style>
-:root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
-body { margin:0; background:#0b0b0c; color:#f3f3f4; }
-header { padding:14px; border-bottom:1px solid #222; position:sticky; top:0; background:#0b0b0c; z-index:10; }
-h1 { font-size:16px; margin:0 0 10px; }
-nav { display:flex; gap:8px; }
-button.tab { flex:1; padding:10px; border-radius:12px; border:1px solid #2a2a2a; background:#121214; color:#f3f3f4; }
-button.tab.active { border-color:#6a6a6a; background:#17171a; }
-main { padding:14px; max-width:900px; margin:0 auto; }
-.card { background:#121214; border:1px solid #222; border-radius:16px; padding:14px; margin:12px 0; }
-label { font-size:12px; color:#cfcfd6; display:block; margin-bottom:6px; }
-input, textarea {
-  width:100%; padding:10px 12px; border-radius:12px;
-  border:1px solid #2a2a2a; background:#0f0f10; color:#f3f3f4;
-}
-textarea { min-height:110px; }
-.actions { display:flex; gap:10px; flex-wrap:wrap; }
-.btn { padding:10px 12px; border-radius:12px; border:1px solid #2a2a2a; background:#17171a; color:#f3f3f4; }
-.btn.primary { border-color:#6a6a6a; }
-pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:14px; white-space:pre-wrap; }
-.muted { font-size:12px; color:#b8b8c0; }
-.pill { display:inline-block; padding:4px 8px; border:1px solid #2a2a2a; border-radius:999px; font-size:12px; }
-</style>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    body { margin:0; background:#0b0b0c; color:#f3f3f4; }
+    header { padding:14px; border-bottom:1px solid #222; position:sticky; top:0; background:#0b0b0c; z-index:10; }
+    h1 { font-size:16px; margin:0 0 10px; font-weight:700; }
+    nav { display:flex; gap:8px; }
+    button.tab { flex:1; padding:10px; border-radius:12px; border:1px solid #2a2a2a; background:#121214; color:#f3f3f4; }
+    button.tab.active { border-color:#6a6a6a; background:#17171a; }
+    main { padding:14px; max-width:900px; margin:0 auto; }
+    .card { background:#121214; border:1px solid #222; border-radius:16px; padding:14px; margin:12px 0; }
+    label { font-size:12px; color:#cfcfd6; display:block; margin:10px 0 6px; }
+    input, textarea {
+      width:100%; padding:10px 12px; border-radius:12px;
+      border:1px solid #2a2a2a; background:#0f0f10; color:#f3f3f4;
+      box-sizing:border-box;
+    }
+    textarea { min-height:110px; resize:vertical; }
+    .actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .btn { padding:10px 12px; border-radius:12px; border:1px solid #2a2a2a; background:#17171a; color:#f3f3f4; cursor:pointer; }
+    .btn.primary { border-color:#6a6a6a; }
+    .muted { font-size:12px; color:#b8b8c0; }
+    .pill { display:inline-block; padding:4px 8px; border:1px solid #2a2a2a; border-radius:999px; font-size:12px; color:#d7d7de; }
+    pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:14px; white-space:pre-wrap; word-break:break-word; }
+  </style>
 </head>
 
 <body>
-
 <header>
   <h1>Work Stock Cutter</h1>
   <nav>
@@ -43,148 +44,332 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 </header>
 
 <main>
+  <!-- CALC -->
+  <section id="screen-calc">
+    <div class="muted" id="ver" style="text-align:center; padding:6px 0;">Version: —</div>
 
-<section id="screen-calc">
-  <div class="muted" id="ver" style="text-align:center">Version: —</div>
+    <div class="card">
+      <label>Stock Length (mm)</label>
+      <input id="stockLen" type="number" value="11900" min="1" />
 
-  <div class="card">
-    <label>Stock Length (mm)</label>
-    <input id="stockLen" type="number" value="11900" />
+      <label>Profile</label>
+      <input id="profile" value="100/4" />
 
-    <label>Profile</label>
-    <input id="profile" value="100/4" />
+      <label>Lengths (mm) — space/newline/comma separated</label>
+      <textarea id="lengths" placeholder="40000 4394 3742 4488"></textarea>
 
-    <label>Lengths (mm)</label>
-    <textarea id="lengths" placeholder="6000 3736 4722"></textarea>
+      <div class="actions">
+        <button class="btn primary" id="btnCalc">Make cut plan</button>
+        <button class="btn" id="btnClear">Clear</button>
+      </div>
 
-    <div class="actions">
-      <button class="btn primary" id="btnCalc">Make cut plan</button>
-      <button class="btn" id="btnApply" disabled>Apply plan</button>
-      <button class="btn" id="btnClear">Clear</button>
+      <div class="muted" style="margin-top:10px">
+        Rule: stock first. If a piece doesn’t fit in one bar, it may be welded using max 2 bars.
+      </div>
     </div>
 
-    <div class="muted">
-      Rule: stock first. If a piece doesn’t fit in one bar, it may be welded using max 2 bars.
+    <div class="card">
+      <div class="pill">Result</div>
+      <pre id="result">—</pre>
     </div>
-  </div>
+  </section>
 
-  <div class="card">
-    <div class="pill">Result</div>
-    <pre id="result">—</pre>
-  </div>
-</section>
+  <!-- STOCK -->
+  <section id="screen-stock" style="display:none">
+    <div class="card">
+      <label>Profile</label>
+      <input id="stockProfile" value="100/4" />
 
-<section id="screen-stock" style="display:none">
-  <div class="card">
-    <label>Profile</label>
-    <input id="stockProfile" value="100/4" />
+      <label>Add length (mm)</label>
+      <input id="stockAddLen" type="number" placeholder="e.g. 5427" />
 
-    <label>Add length (mm)</label>
-    <input id="stockAddLen" />
+      <div class="actions">
+        <button class="btn primary" id="btnAddBar">Add bar</button>
+        <button class="btn" id="btnAddFull">Add full (Stock Length)</button>
+        <button class="btn" id="btnClearStock">Clear this profile stock</button>
+      </div>
 
-    <div class="actions">
-      <button class="btn primary" id="btnAddBar">Add bar</button>
-      <button class="btn" id="btnAddFull">Add full bar</button>
+      <div class="muted" style="margin-top:10px">
+        Stock is saved locally on your phone (per profile).
+      </div>
     </div>
-  </div>
 
-  <div class="card">
-    <div class="pill">Stock</div>
-    <pre id="stockView">—</pre>
-  </div>
-</section>
-
+    <div class="card">
+      <div class="pill">Stock (this profile)</div>
+      <pre id="stockView">—</pre>
+    </div>
+  </section>
 </main>
 
 <script>
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
+  // PWA
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
-const APP_VERSION = "v6.1";
-document.getElementById("ver").textContent = "Version: " + APP_VERSION;
+  // Version label
+  const APP_VERSION = "v6.1";
+  document.getElementById("ver").textContent = "Version: " + APP_VERSION;
 
-const LS = "wsc_stock_v6";
+  // Local storage
+  const LS = "wsc_stock_v6";
+  function loadAllStock() {
+    try { return JSON.parse(localStorage.getItem(LS) || "{}"); }
+    catch { return {}; }
+  }
+  function saveAllStock(s) { localStorage.setItem(LS, JSON.stringify(s)); }
 
-function loadStock(){ return JSON.parse(localStorage.getItem(LS)||"{}"); }
-function saveStock(s){ localStorage.setItem(LS,JSON.stringify(s)); }
-
-function addBar(p,l){
-  const s=loadStock(); s[p]=s[p]||[]; s[p].push(l); saveStock(s);
-}
-function stockText(p){
-  const s=loadStock()[p]||[];
-  return s.length ? s.map(x=>x+" mm").join("\n") : "No stock";
-}
-
-function parseLens(t){
-  return t.replace(/,/g," ").split(/\s+/).map(Number).filter(x=>x>0);
-}
-
-function makePlan(stockLen,profile,cuts){
-  const stock=(loadStock()[profile]||[]).sort((a,b)=>b-a);
-  const bins=stock.map((l,i)=>({id:"STOCK-"+(i+1),base:l,rem:l,src:"STOCK"}));
-  let newId=0;
-  const jobs=[];
-
-  function newBin(){
-    newId++; const b={id:"NEW-"+newId,base:stockLen,rem:stockLen,src:"NEW"};
-    bins.push(b); return b;
+  function getProfileStock(profile) {
+    const s = loadAllStock();
+    return (s[profile] || []).slice();
+  }
+  function setProfileStock(profile, arr) {
+    const s = loadAllStock();
+    s[profile] = arr.slice();
+    saveAllStock(s);
   }
 
-  cuts.forEach((L,i)=>{
-    let b=bins.find(x=>x.rem>=L);
-    if(b){
-      b.rem-=L;
-      jobs.push(`REQUIRED ${L} mm\n → Use ${b.src} ${b.id} (${b.base})\n`);
-      return;
+  function addBar(profile, len) {
+    len = Math.round(Number(len));
+    if (!(len > 0)) return;
+    const arr = getProfileStock(profile);
+    arr.push(len);
+    setProfileStock(profile, arr);
+  }
+
+  function clearProfileStock(profile) {
+    setProfileStock(profile, []);
+  }
+
+  function formatStock(profile) {
+    const arr = getProfileStock(profile).sort((a,b)=>b-a);
+    if (!arr.length) return "No stock saved for this profile.";
+    return arr.map((x,i)=>`${i+1}) ${x} mm`).join("\n");
+  }
+
+  function parseLengths(text) {
+    return (text || "")
+      .replace(/,/g, " ")
+      .split(/\s+/)
+      .map(x => x.trim())
+      .filter(Boolean)
+      .map(Number)
+      .filter(n => Number.isFinite(n) && n > 0)
+      .map(n => Math.round(n));
+  }
+
+  // Planner:
+  // - Build bins from current stock (as separate bars)
+  // - If needed, create NEW bars of stockLen
+  // - For each required length:
+  //   - Try fit in one bar
+  //   - Else weld using 2 bars: use up one bar + take remainder from another/new bar
+  function makePlan(stockLen, profile, requiredList) {
+    const stockBars = getProfileStock(profile).sort((a,b)=>b-a);
+
+    const bins = stockBars.map((len, i) => ({
+      id: `STOCK-${i+1}`,
+      type: "STOCK",
+      base: len,
+      rem: len
+    }));
+
+    let newCount = 0;
+    function newBin() {
+      newCount++;
+      const b = { id: `NEW-${newCount}`, type: "NEW", base: stockLen, rem: stockLen };
+      bins.push(b);
+      return b;
     }
-    let b1=bins.find(x=>x.rem>0 && x.rem<L);
-    if(b1){
-      const need=L-b1.rem;
-      let b2=bins.find(x=>x!==b1 && x.rem>=need) || newBin();
-      jobs.push(`REQUIRED ${L} mm 🔥\n → Use ${b1.src} ${b1.id} (${b1.base}) FULL\n → Take ${need} from ${b2.src} ${b2.id}\n`);
-      b1.rem=0; b2.rem-=need;
-      return;
+
+    // For your "WHAT TO USE" display
+    // Each entry: { need, welded, parts:[{cut, fromId}] }
+    const plan = { profile, stockLen, required: [], bins };
+
+    // Process in input order (so it matches what you typed)
+    for (const need of requiredList) {
+      if (need > stockLen) {
+        return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
+      }
+
+      // 1) Try whole in one bin (stock first because stock bins are earlier, and we pick best-fit)
+      let best = null;
+      for (const b of bins) {
+        if (b.rem >= need) {
+          const after = b.rem - need;
+          if (!best || after < best.after) best = { b, after };
+        }
+      }
+      if (best) {
+        best.b.rem -= need;
+        plan.required.push({
+          need,
+          welded: false,
+          parts: [{ cut: need, fromId: best.b.id }]
+        });
+        continue;
+      }
+
+      // 2) Weld using max 2 bars:
+      // choose a donor bar b1 that has some rem but < need, use it FULL,
+      // then take rest from best-fit b2 (or new bar).
+      let bestSplit = null;
+      for (const b1 of bins) {
+        if (b1.rem > 0 && b1.rem < need) {
+          const take1 = b1.rem;
+          const need2 = need - take1;
+
+          // choose b2
+          let b2best = null;
+          let b2after = Infinity;
+
+          for (const b2 of bins) {
+            if (b2 === b1) continue;
+            if (b2.rem >= need2) {
+              const after = b2.rem - need2;
+              if (after < b2after) { b2after = after; b2best = b2; }
+            }
+          }
+
+          // or create a new bar
+          const newAfter = stockLen - need2;
+
+          // compute "waste after" for comparison
+          // b1 becomes 0; b2 has after
+          const bestAfter = b2best ? b2after : Infinity;
+          const chooseNew = !b2best || (newAfter < bestAfter);
+          const afterWaste = chooseNew ? newAfter : bestAfter;
+
+          if (!bestSplit || afterWaste < bestSplit.afterWaste) {
+            bestSplit = { b1, take1, need2, b2best, chooseNew, afterWaste };
+          }
+        }
+      }
+
+      if (bestSplit) {
+        const { b1, take1, need2, b2best, chooseNew } = bestSplit;
+        const b2 = chooseNew ? newBin() : b2best;
+
+        // Use b1 FULL
+        b1.rem = 0;
+        // Take need2 from b2
+        b2.rem -= need2;
+
+        plan.required.push({
+          need,
+          welded: true,
+          parts: [
+            { cut: take1, fromId: b1.id },
+            { cut: need2, fromId: b2.id }
+          ]
+        });
+        continue;
+      }
+
+      // 3) Otherwise, must use a new bar (whole)
+      const nb = newBin();
+      nb.rem -= need;
+      plan.required.push({
+        need,
+        welded: false,
+        parts: [{ cut: need, fromId: nb.id }]
+      });
     }
-    const nb=newBin(); nb.rem-=L;
-    jobs.push(`REQUIRED ${L} mm\n → Use NEW ${nb.id} (${nb.base})\n`);
+
+    return { ok:true, plan };
+  }
+
+  function formatResult(planObj) {
+    const { plan } = planObj;
+
+    const out = [];
+    out.push("=== WHAT TO USE ===\n");
+
+    for (const r of plan.required) {
+      out.push(`Required ${r.need} mm${r.welded ? " 🔥" : ""}`);
+      for (const p of r.parts) {
+        out.push(`${p.cut} (${p.fromId})`);
+      }
+      out.push(""); // blank line between pieces
+    }
+
+    // Total leftover saved (sum of remaining on bins that were touched or not — simple and clear)
+    const totalLeft = plan.bins.reduce((s,b)=>s + (b.rem || 0), 0);
+    out.push(`Total leftover saved: ${totalLeft} mm`);
+
+    return out.join("\n");
+  }
+
+  // UI
+  const tabs = document.querySelectorAll("button.tab");
+  const screenCalc = document.getElementById("screen-calc");
+  const screenStock = document.getElementById("screen-stock");
+
+  tabs.forEach(t => t.addEventListener("click", () => {
+    tabs.forEach(x => x.classList.toggle("active", x === t));
+    const s = t.dataset.screen;
+    screenCalc.style.display = (s === "calc") ? "" : "none";
+    screenStock.style.display = (s === "stock") ? "" : "none";
+    if (s === "stock") refreshStockView();
+  }));
+
+  const elStockLen = document.getElementById("stockLen");
+  const elProfile = document.getElementById("profile");
+  const elLengths = document.getElementById("lengths");
+  const elResult = document.getElementById("result");
+
+  const stockProfile = document.getElementById("stockProfile");
+  const stockAddLen = document.getElementById("stockAddLen");
+  const stockView = document.getElementById("stockView");
+
+  function refreshStockView() {
+    stockView.textContent = formatStock(stockProfile.value.trim());
+  }
+
+  document.getElementById("btnCalc").addEventListener("click", () => {
+    const stockLen = Math.round(Number(elStockLen.value));
+    const profile = elProfile.value.trim();
+    const cuts = parseLengths(elLengths.value);
+
+    if (!profile) { elResult.textContent = "❌ Please enter Profile."; return; }
+    if (!(stockLen > 0)) { elResult.textContent = "❌ Stock Length must be > 0."; return; }
+    if (!cuts.length) { elResult.textContent = "❌ Enter at least one required length."; return; }
+
+    const res = makePlan(stockLen, profile, cuts);
+    if (!res.ok) { elResult.textContent = "❌ " + res.error; return; }
+
+    elResult.textContent = formatResult(res);
   });
 
-  let waste=bins.reduce((s,b)=>s+b.rem,0);
-  return {jobs,bins,waste};
-}
+  document.getElementById("btnClear").addEventListener("click", () => {
+    elLengths.value = "";
+    elResult.textContent = "—";
+  });
 
-const tabs=document.querySelectorAll(".tab");
-tabs.forEach(t=>t.onclick=()=>{
-  tabs.forEach(x=>x.classList.toggle("active",x===t));
-  document.getElementById("screen-calc").style.display=t.dataset.screen==="calc"?"":"none";
-  document.getElementById("screen-stock").style.display=t.dataset.screen==="stock"?"":"none";
-  if(t.dataset.screen==="stock")
-    document.getElementById("stockView").textContent=stockText(document.getElementById("stockProfile").value);
-});
+  document.getElementById("btnAddBar").addEventListener("click", () => {
+    const p = stockProfile.value.trim();
+    const l = Number(stockAddLen.value);
+    if (!p || !(l > 0)) return;
+    addBar(p, l);
+    stockAddLen.value = "";
+    refreshStockView();
+  });
 
-document.getElementById("btnCalc").onclick=()=>{
-  const plan=makePlan(
-    +stockLen.value,
-    profile.value,
-    parseLens(lengths.value)
-  );
-  document.getElementById("result").textContent=
-    "=== WHAT TO USE ===\n\n"+
-    plan.jobs.join("\n")+
-    "\nTotal leftover saved: "+plan.waste+" mm";
-};
+  document.getElementById("btnAddFull").addEventListener("click", () => {
+    const p = stockProfile.value.trim();
+    const l = Math.round(Number(elStockLen.value || 11900));
+    if (!p || !(l > 0)) return;
+    addBar(p, l);
+    refreshStockView();
+  });
 
-document.getElementById("btnAddBar").onclick=()=>{
-  addBar(stockProfile.value,+stockAddLen.value);
-  stockAddLen.value="";
-  stockView.textContent=stockText(stockProfile.value);
-};
+  document.getElementById("btnClearStock").addEventListener("click", () => {
+    const p = stockProfile.value.trim();
+    if (!p) return;
+    clearProfileStock(p);
+    refreshStockView();
+  });
 
-document.getElementById("btnAddFull").onclick=()=>{
-  addBar(stockProfile.value,+stockLen.value);
-  stockView.textContent=stockText(stockProfile.value);
-};
+  // init
+  refreshStockView();
 </script>
-
 </body>
 </html>
