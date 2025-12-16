@@ -45,7 +45,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 <main>
 
 <section id="calc">
-  <div class="muted" style="text-align:center">Version: v6.8</div>
+  <div class="muted" style="text-align:center">Version: v6.9</div>
 
   <div class="card">
     <label>Stock Length (mm)</label>
@@ -57,8 +57,11 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     <label>Stock trim (mm) — applies to SAVED stock/offcuts only</label>
     <input id="stockTrim" type="number" value="10" min="0" max="200">
 
+    <label>Base cut from NEW (mm) — optional (example: 2900 for 5900 bars)</label>
+    <input id="baseCut" type="number" value="0" min="0">
+
     <label>Lengths (mm)</label>
-    <textarea id="lengths" placeholder="5455 4233 4334 4345 4345"></textarea>
+    <textarea id="lengths" placeholder="4094 4094 4094 4094 4308 4308 4308 4308 4458"></textarea>
 
     <div class="actions">
       <button class="btn primary" id="calcBtn">Make cut plan</button>
@@ -66,9 +69,8 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     </div>
 
     <div class="muted" style="margin-top:8px">
-      Rule: stock first. If needed, weld using max 2 bars.
-      Stock/offcuts lose “Stock trim” from the crude end.
-      NEW full bars show as StockLength#1, #2, ...
+      Rule: stock first. If Base cut is set, planner may cut NEW bars into base pieces (like 2900+2900 from 5900) and top-up with stock.
+      Stock/offcuts lose “Stock trim” from the crude end. Weld = max 2 bars.
     </div>
   </div>
 
@@ -84,7 +86,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     <input id="stockProfile" value="100/4">
 
     <label>Add stock length (mm)</label>
-    <input id="stockAdd" type="number" placeholder="e.g. 5528">
+    <input id="stockAdd" type="number" placeholder="e.g. 1500">
 
     <div class="actions">
       <button class="btn primary" id="addStock">Add stock</button>
@@ -110,7 +112,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
 // Storage
-const LS = "wsc_stock_v6_8";
+const LS = "wsc_stock_v6_9";
 function loadAll(){ try { return JSON.parse(localStorage.getItem(LS)||"{}"); } catch { return {}; } }
 function saveAll(v){ localStorage.setItem(LS, JSON.stringify(v)); }
 function getStock(p){ return (loadAll()[p] || []).slice(); }
@@ -134,46 +136,39 @@ function refreshStock(){
 }
 
 /**
- * makePlan rules:
- * - Try fit in existing bars first (stock + any already-open NEW bars)
- * - If not possible, weld using:
- *    A) STOCK+STOCK (only if both are SAVED stock and neither has been used in a weld before)
- *    B) STOCK + already-open NEW (never open a NEW bar just to weld)
- * - Otherwise, open a NEW bar and cut from it (no weld)
+ * Planner v6.9
+ * Adds BaseCut strategy:
+ * - If baseCut>0: for a required length L, try:
+ *     baseCut from NEW + (L-baseCut) from ONE saved stock/offcut
+ *   This allows your 5900 -> 2900+2900 approach.
  */
-function makePlan(stockLen, profile, needs, trim){
+function makePlan(stockLen, profile, needs, trim, baseCut){
+  // saved stock/offcuts
   const stockBars = getStock(profile).sort((a,b)=>b-a);
 
-  // bins = stock/offcut pieces
+  // bins include STOCK and NEW bars (NEW bars opened on demand)
   const bins = stockBars.map((len, idx) => ({
     kind: "STOCK",
     base: len,
     rem: Math.max(0, len - trim),
     id: `STOCK-${idx+1}`,
     display: String(len),
-    weldLocked: false // true after this stock is used in a weld
+    weldLocked: false // only matters for stock used in welds
   }));
 
-  // list of NEW bars that got opened
   let newCount = 0;
-  const newDisplays = []; // ["11900#1","11900#2",...]
+  const newDisplays = []; // all NEW bars created in this plan, in order
 
   function newBin(){
     newCount++;
     const disp = `${stockLen}#${newCount}`;
-    const b = {
-      kind:"NEW",
-      base: stockLen,
-      rem: stockLen,
-      id: `NEW-${newCount}`,
-      display: disp
-    };
+    const b = { kind:"NEW", base:stockLen, rem:stockLen, id:`NEW-${newCount}`, display:disp };
     bins.push(b);
     newDisplays.push(disp);
     return b;
   }
 
-  // best-fit for a single cut into any bin
+  // best-fit (single cut) in any bin
   function bestFitBin(need){
     let best = null;
     for (const b of bins){
@@ -185,23 +180,34 @@ function makePlan(stockLen, profile, needs, trim){
     return best ? best.b : null;
   }
 
-  // best-fit but ONLY among already-open NEW bars
-  function bestFitOpenNew(need){
+  // find best stock/offcut to supply "need2" (one bar only), prefer smallest leftover
+  function bestStockFor(need2){
     let best = null;
     for (const b of bins){
-      if (b.kind !== "NEW") continue;
-      if (b.rem >= need){
-        const after = b.rem - need;
+      if (b.kind !== "STOCK") continue;
+      if (b.weldLocked) continue; // "1 stock = 1 weld" rule
+      if (b.rem >= need2){
+        const after = b.rem - need2;
         if (!best || after < best.after) best = { b, after };
       }
     }
     return best ? best.b : null;
   }
 
+  // take a baseCut segment from NEW bars:
+  // - reuse an already-open NEW bar if it has enough remainder
+  // - else open a new one
+  function takeBaseFromNew(){
+    for (const b of bins){
+      if (b.kind === "NEW" && b.rem >= baseCut) return b;
+    }
+    return newBin();
+  }
+
   const results = [];
   let seq = 0;
 
-  // process larger first for better packing
+  // process big first helps a lot
   const work = [...needs].sort((a,b)=>b-a);
 
   for (const need of work){
@@ -209,122 +215,50 @@ function makePlan(stockLen, profile, needs, trim){
       return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
     }
 
-    // 1) try fit whole in any existing bar
+    // 1) Fit whole into existing bar
     const fit = bestFitBin(need);
     if (fit){
       fit.rem -= need;
       seq++;
       results.push({
-        need,
-        welded:false,
-        seq,
+        need, welded:false, seq,
         mainDisplay: (fit.kind === "NEW") ? fit.display : null,
         parts:[{ cut: need, fromDisplay: fit.display }]
       });
       continue;
     }
 
-    // 2) try weld STOCK + STOCK (no opening NEW)
-    // choose the largest STOCK remainder first (to avoid slicing one stock into many welds)
-    let bestWeldSS = null;
-    const stockList = bins
-      .filter(b => b.kind==="STOCK" && !b.weldLocked && b.rem > 0)
-      .sort((a,b)=>b.rem - a.rem);
+    // 2) BaseCut strategy (NEW base + stock top-up)
+    if (baseCut > 0 && baseCut < stockLen && need > baseCut){
+      const need2 = need - baseCut; // what we must take from stock/offcut
+      const st = bestStockFor(need2);
+      if (st){
+        const nb = takeBaseFromNew();
+        // allocate
+        nb.rem -= baseCut;
+        st.rem -= need2;
+        st.weldLocked = true;
 
-    for (let i=0; i<stockList.length; i++){
-      const b1 = stockList[i];
-      if (b1.rem >= need) continue; // would have fit, but it didn't; still skip
-      const take1 = b1.rem;
-      const need2 = need - take1;
-
-      // find b2 that can finish
-      let b2best = null;
-      let afterBest = Infinity;
-      for (let j=0; j<stockList.length; j++){
-        if (j===i) continue;
-        const b2 = stockList[j];
-        if (b2.rem >= need2){
-          const after = b2.rem - need2;
-          if (after < afterBest){
-            afterBest = after;
-            b2best = b2;
-          }
-        }
-      }
-
-      if (b2best){
-        bestWeldSS = { b1, b2: b2best, take1, need2, afterBest };
-        break; // because b1 are sorted by largest rem: use biggest donor first
+        seq++;
+        results.push({
+          need, welded:true, seq,
+          mainDisplay: nb.display, // group under the NEW bar
+          parts:[
+            { cut: baseCut, fromDisplay: nb.display },
+            { cut: need2,  fromDisplay: st.display }
+          ]
+        });
+        continue;
       }
     }
 
-    if (bestWeldSS){
-      const { b1, b2, take1, need2 } = bestWeldSS;
-      b1.rem = 0;
-      b2.rem -= need2;
-      b1.weldLocked = true;
-      b2.weldLocked = true;
-
-      seq++;
-      results.push({
-        need,
-        welded:true,
-        seq,
-        mainDisplay: null, // stock section
-        parts:[
-          { cut: take1, fromDisplay: b1.display },
-          { cut: need2, fromDisplay: b2.display }
-        ]
-      });
-      continue;
-    }
-
-    // 3) try weld STOCK + already-open NEW (NEVER open a NEW bar just to weld)
-    // choose largest STOCK remainder first
-    let bestWeldSN = null;
-    for (const b1 of stockList){
-      if (b1.rem <= 0 || b1.rem >= need) continue;
-      const take1 = b1.rem;
-      const need2 = need - take1;
-
-      const newBar = bestFitOpenNew(need2);
-      if (newBar){
-        const after = newBar.rem - need2;
-        bestWeldSN = { b1, newBar, take1, need2, after };
-        break;
-      }
-    }
-
-    if (bestWeldSN){
-      const { b1, newBar, take1, need2 } = bestWeldSN;
-      b1.rem = 0;
-      b1.weldLocked = true;
-      newBar.rem -= need2;
-
-      seq++;
-      results.push({
-        need,
-        welded:true,
-        seq,
-        // group under the NEW bar we actually need on the machine
-        mainDisplay: newBar.display,
-        parts:[
-          { cut: take1, fromDisplay: b1.display },
-          { cut: need2, fromDisplay: newBar.display }
-        ]
-      });
-      continue;
-    }
-
-    // 4) otherwise open a NEW bar and cut whole (no weld)
+    // 3) Fallback: open NEW bar and cut whole (no weld)
     const nb = newBin();
     nb.rem -= need;
 
     seq++;
     results.push({
-      need,
-      welded:false,
-      seq,
+      need, welded:false, seq,
       mainDisplay: nb.display,
       parts:[{ cut: need, fromDisplay: nb.display }]
     });
@@ -334,44 +268,37 @@ function makePlan(stockLen, profile, needs, trim){
   return { ok:true, plan:{ results, totalLeftoverUsable, trim, newDisplays } };
 }
 
-// Output with NEW-bar group headers (always show any created NEW headers)
+// Output: STOCK section + headers for ALL created NEW bars (even if only 1 line)
 function format(plan){
   const out = [];
   out.push("=== WHAT TO USE ===\n");
 
-  // Sort overall: non-weld first, welded last, then by seq
+  // sort overall: non-weld first, welded last, then seq
   const sorted = [...plan.results].sort((a,b)=>{
     if (a.welded !== b.welded) return a.welded ? 1 : -1;
     return a.seq - b.seq;
   });
 
   const stockLines = [];
-  const byNew = new Map(); // key: "11900#1" -> lines
+  const byNew = new Map();
 
   for (const r of sorted){
-    if (!r.mainDisplay){
-      stockLines.push(r);
-    } else {
+    if (!r.mainDisplay) stockLines.push(r);
+    else {
       if (!byNew.has(r.mainDisplay)) byNew.set(r.mainDisplay, []);
       byNew.get(r.mainDisplay).push(r);
     }
   }
 
-  // STOCK / OFFCUTS section
   if (stockLines.length){
     out.push("STOCK / OFFCUTS");
     for (const r of stockLines){
-      if (!r.welded){
-        out.push(`${r.need} = ${r.need} (${r.parts[0].fromDisplay})`);
-      } else {
-        const partsTxt = r.parts.map(p => `${p.cut} (${p.fromDisplay})`).join(" + ");
-        out.push(`${r.need} 🔥 = ${partsTxt}`);
-      }
+      out.push(`${r.need} = ${r.need} (${r.parts[0].fromDisplay})`);
     }
     out.push("");
   }
 
-  // NEW headers: ALWAYS for each created NEW bar, in numeric order
+  // show every created NEW bar header
   const newKeys = (plan.newDisplays || []).slice().sort((a,b)=>{
     const na = Number((a.split("#")[1]||"0"));
     const nb = Number((b.split("#")[1]||"0"));
@@ -398,6 +325,7 @@ function format(plan){
       if (!r.welded){
         out.push(`${r.need} = ${r.need} (${r.parts[0].fromDisplay})`);
       } else {
+        // print as: L 🔥 = base(new) + topup(stock)
         const partsTxt = r.parts.map(p => `${p.cut} (${p.fromDisplay})`).join(" + ");
         out.push(`${r.need} 🔥 = ${partsTxt}`);
       }
@@ -414,6 +342,7 @@ function format(plan){
 const stockLenEl = document.getElementById("stockLen");
 const profileEl  = document.getElementById("profile");
 const trimEl     = document.getElementById("stockTrim");
+const baseCutEl  = document.getElementById("baseCut");
 const lengthsEl  = document.getElementById("lengths");
 const resultEl   = document.getElementById("result");
 
@@ -425,13 +354,14 @@ document.getElementById("calcBtn").onclick = () => {
   const stockLen = Math.round(Number(stockLenEl.value));
   const profile = profileEl.value.trim();
   const trim = Math.max(0, Math.round(Number(trimEl.value || 0)));
+  const baseCut = Math.max(0, Math.round(Number(baseCutEl.value || 0)));
   const needs = parseLengths(lengthsEl.value);
 
   if (!profile) { resultEl.textContent = "❌ Please enter Profile."; return; }
   if (!(stockLen > 0)) { resultEl.textContent = "❌ Stock Length must be > 0."; return; }
   if (!needs.length) { resultEl.textContent = "❌ Enter at least one required length."; return; }
 
-  const res = makePlan(stockLen, profile, needs, trim);
+  const res = makePlan(stockLen, profile, needs, trim, baseCut);
   if (!res.ok) { resultEl.textContent = "❌ " + res.error; return; }
   resultEl.textContent = format(res.plan);
 };
