@@ -1,265 +1,561 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Work Stock Cutter</title>
-
-<link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#111111" />
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#111111">
 
 <style>
-:root {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-}
-body {
-  margin: 0;
-  background: #0b0b0c;
-  color: #f3f3f4;
-}
-header {
-  padding: 14px;
-  font-size: 16px;
-  font-weight: 700;
-}
-nav {
-  display: flex;
-  gap: 10px;
-  padding: 0 14px;
-}
-button.tab {
-  flex: 1;
-  padding: 12px;
-  border-radius: 18px;
-  border: 1px solid #2a2a2a;
-  background: #1a1a1c;
-  color: #f3f3f4;
-  font-size: 15px;
-}
-button.tab.active {
-  background: #2a2a2e;
-}
-main {
-  padding: 14px;
-  max-width: 900px;
-  margin: 0 auto;
-}
-.card {
-  background: #121214;
-  border: 1px solid #222;
-  border-radius: 16px;
-  padding: 14px;
-  margin-bottom: 14px;
-}
-label {
-  display: block;
-  font-size: 12px;
-  opacity: 0.8;
-  margin-bottom: 4px;
-}
+:root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+body { margin:0; background:#0b0b0c; color:#f3f3f4; }
+header { padding:14px; border-bottom:1px solid #222; position:sticky; top:0; background:#0b0b0c; }
+h1 { font-size:16px; margin:0 0 8px; font-weight:700; }
+nav { display:flex; gap:8px; }
+button.tab { flex:1; padding:10px; border-radius:12px; border:1px solid #2a2a2a; background:#121214; color:#f3f3f4; }
+button.tab.active { border-color:#6a6a6a; background:#17171a; }
+main { padding:14px; max-width:900px; margin:0 auto; }
+.card { background:#121214; border:1px solid #222; border-radius:16px; padding:14px; margin:12px 0; }
+label { font-size:12px; color:#cfcfd6; display:block; margin:10px 0 6px; }
 input, textarea {
-  width: 100%;
-  box-sizing: border-box;
-  background: #0f0f10;
-  border: 1px solid #2a2a2a;
-  color: #f3f3f4;
-  border-radius: 14px;
-  padding: 10px 12px;
-  font-size: 14px;
+  width:100%; padding:10px 12px; border-radius:12px;
+  border:1px solid #2a2a2a; background:#0f0f10; color:#f3f3f4;
+  box-sizing:border-box;
 }
-textarea {
-  min-height: 110px;
-  resize: vertical;
+textarea { min-height:110px; resize:vertical; }
+.actions { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+.btn { padding:10px 12px; border-radius:12px; border:1px solid #2a2a2a; background:#17171a; color:#f3f3f4; cursor:pointer; }
+.btn.primary { border-color:#6a6a6a; }
+.muted { font-size:12px; color:#b8b8c0; }
+.pill { display:inline-block; padding:4px 8px; border:1px solid #2a2a2a; border-radius:999px; font-size:12px; }
+pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:14px; white-space:pre-wrap; word-break:break-word; }
+.row2 { display:grid; grid-template-columns:1fr; gap:10px; }
+@media (min-width:720px){ .row2 { grid-template-columns:1fr 1fr; } }
+.chkline{
+  display:flex; gap:10px; align-items:flex-start;
+  padding:10px 12px; border-radius:12px;
+  border:1px solid #2a2a2a; background:#0f0f10;
+  margin-top:10px;
 }
-.actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
-}
-button.btn {
-  padding: 10px 14px;
-  border-radius: 14px;
-  border: 1px solid #2a2a2a;
-  background: #1c1c1f;
-  color: #fff;
-}
-.result {
-  white-space: pre-wrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
-}
-.muted {
-  opacity: 0.7;
-  font-size: 12px;
-}
-.checkbox {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-}
+.chkline input{ width:auto; margin-top:2px; }
 </style>
 </head>
 
 <body>
-<header>Work Stock Cutter</header>
-
-<nav>
-  <button class="tab active" id="tabCalc">Calculate</button>
-  <button class="tab" id="tabStock">Stock</button>
-</nav>
+<header>
+  <h1>Work Stock Cutter</h1>
+  <nav>
+    <button class="tab active" data-tab="calc">Calculate</button>
+    <button class="tab" data-tab="stock">Stock</button>
+  </nav>
+</header>
 
 <main>
 
-<!-- CALCULATE -->
-<section id="screenCalc">
+<section id="calc">
+  <div class="muted" style="text-align:center">Version: v7.3</div>
 
-<div class="card">
-  <label>Stock Length (mm)</label>
-  <input id="stockLen" type="number" value="11900" />
+  <div class="card">
+    <label>Stock Length (mm)</label>
+    <input id="stockLen"
+           type="number"
+           inputmode="numeric"
+           pattern="[0-9]*"
+           value="11900" min="1">
 
-  <label style="margin-top:8px;">Profile</label>
-  <input id="profile" value="100/4" />
+    <label>Profile</label>
+    <input id="profile" value="100/4" autocomplete="off" autocapitalize="off">
 
-  <label style="margin-top:8px;">Saved stock trim (mm) — applies to SAVED stock/offcuts</label>
-  <input id="savedTrim" type="number" value="10" />
+    <div class="row2">
+      <div>
+        <label>Saved stock trim (mm) — applies to SAVED stock/offcuts only</label>
+        <input id="stockTrim"
+               type="number"
+               inputmode="numeric"
+               pattern="[0-9]*"
+               value="10" min="0" max="500">
+      </div>
+      <div>
+        <label>NEW front trim (mm) — cut off at start (NEW bars only)</label>
+        <input id="newFrontTrim"
+               type="number"
+               inputmode="numeric"
+               pattern="[0-9]*"
+               value="50" min="0" max="500">
+      </div>
+    </div>
 
-  <label style="margin-top:8px;">NEW front trim (mm) — cut off at start (NEW bars only)</label>
-  <input id="newFrontTrim" type="number" value="50" />
+    <label>NEW end reserve (mm) — must be left at end (NEW bars only)</label>
+    <input id="newEndReserve"
+           type="number"
+           inputmode="numeric"
+           pattern="[0-9]*"
+           value="10" min="0" max="500">
 
-  <label style="margin-top:8px;">NEW end reserve (mm) — must be left at end (NEW bars only)</label>
-  <input id="newEndReserve" type="number" value="10" />
+    <label>Base cut from NEW (mm) — 0 = AUTO (uses NEW usable length)</label>
+    <input id="baseCut"
+           type="number"
+           inputmode="numeric"
+           pattern="[0-9]*"
+           value="0" min="0">
 
-  <label style="margin-top:8px;">Base cut from NEW (mm) — 0 = AUTO</label>
-  <input id="baseCut" type="number" value="0" />
+    <label>Lengths (mm)</label>
+    <textarea id="lengths"
+              inputmode="numeric"
+              pattern="[0-9\\s,]*"
+              placeholder="4308 4308 4094 4094"></textarea>
 
-  <label style="margin-top:8px;">Lengths (mm)</label>
-  <textarea
-    id="lengths"
-    inputmode="numeric"
-    pattern="[0-9\s\n]*"
-    placeholder="4308 4308 4094 4094"></textarea>
+    <div class="chkline">
+      <input type="checkbox" id="noWeldMode">
+      <div>
+        <div style="font-size:13px; font-weight:650;">No welds (single bar only)</div>
+        <div class="muted" style="margin:2px 0 0">When ON: each length must come from exactly 1 bar (saved stock or 1 NEW bar). No 🔥.</div>
+      </div>
+    </div>
 
-  <div class="checkbox">
-    <input type="checkbox" id="noWeld" />
-    <label for="noWeld">
-      <b>No welds (single bar only)</b><br>
-      <span class="muted">
-        When ON: each length must come from exactly 1 bar
-        (saved stock or 1 NEW bar). No 🔥.
-      </span>
-    </label>
+    <div class="actions">
+      <button class="btn primary" id="calcBtn">Make cut plan</button>
+      <button class="btn" id="clearBtn">Clear</button>
+    </div>
+
+    <div class="muted" style="margin-top:8px">
+      Rule: stock first. If Base cut is 0, app AUTO picks a base size to allow 2 base cuts per NEW bar (after NEW trims) and top-up with stock.
+      SAVED stock/offcuts lose “Saved stock trim” from the crude end. NEW bars lose “NEW front trim” and must leave “NEW end reserve”.
+      Weld = max 2 bars. Each saved stock piece can be used in at most 1 weld.
+    </div>
   </div>
 
-  <div class="actions">
-    <button class="btn" onclick="makePlan()">Make cut plan</button>
-    <button class="btn" onclick="clearCalc()">Clear</button>
+  <div class="card">
+    <div class="pill">Result</div>
+    <pre id="result">—</pre>
   </div>
-
-  <div class="muted" style="margin-top:6px;">
-    Rule: stock first. AUTO base cut allows 2 base cuts per NEW bar.
-    SAVED stock loses “Saved stock trim”.
-    NEW bars lose “NEW front trim” and must leave “NEW end reserve”.
-    Weld = max 2 bars. Each saved stock piece used at most once.
-  </div>
-</div>
-
-<div class="card">
-  <div class="result" id="result"></div>
-</div>
-
 </section>
 
-<!-- STOCK (placeholder for now) -->
-<section id="screenStock" style="display:none;">
-  <div class="card muted">
-    Stock management stays as-is (not modified in this step).
+<section id="stock" style="display:none">
+  <div class="card">
+    <label>Profile</label>
+    <input id="stockProfile" value="100/4" autocomplete="off" autocapitalize="off">
+
+    <label>Add stock length (mm)</label>
+    <input id="stockAdd"
+           type="number"
+           inputmode="numeric"
+           pattern="[0-9]*"
+           placeholder="e.g. 1500">
+
+    <div class="actions">
+      <button class="btn primary" id="addStock">Add stock</button>
+      <button class="btn" id="addFull">Add full bar (Stock Length) to SAVED stock</button>
+      <button class="btn" id="clearStock">Clear profile stock</button>
+    </div>
+
+    <div class="muted" style="margin-top:8px">
+      Save leftovers/offcuts here. “Saved stock trim” is applied during planning.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="pill">Stock (this profile)</div>
+    <pre id="stockView">—</pre>
   </div>
 </section>
 
 </main>
 
 <script>
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./service-worker.js");
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
+
+// Storage
+const LS = "wsc_stock_v7_3";
+function loadAll(){ try { return JSON.parse(localStorage.getItem(LS)||"{}"); } catch { return {}; } }
+function saveAll(v){ localStorage.setItem(LS, JSON.stringify(v)); }
+function getStock(p){ return (loadAll()[p] || []).slice(); }
+function setStock(p,a){ const s=loadAll(); s[p]=a; saveAll(s); }
+
+function parseLengths(t){
+  return (t||"")
+    .replace(/,/g," ")
+    .split(/\s+/)
+    .map(x=>x.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter(n=>Number.isFinite(n) && n>0)
+    .map(n=>Math.round(n));
 }
 
-const tabCalc = document.getElementById("tabCalc");
-const tabStock = document.getElementById("tabStock");
-const screenCalc = document.getElementById("screenCalc");
-const screenStock = document.getElementById("screenStock");
-
-tabCalc.onclick = () => {
-  tabCalc.classList.add("active");
-  tabStock.classList.remove("active");
-  screenCalc.style.display = "";
-  screenStock.style.display = "none";
-};
-tabStock.onclick = () => {
-  tabStock.classList.add("active");
-  tabCalc.classList.remove("active");
-  screenStock.style.display = "";
-  screenCalc.style.display = "none";
-};
-
-function clearCalc() {
-  document.getElementById("lengths").value = "";
-  document.getElementById("result").textContent = "";
+function refreshStock(){
+  const p = stockProfile.value.trim();
+  const a = getStock(p).sort((a,b)=>b-a);
+  stockView.textContent = a.length ? a.map(x=>x+" mm").join("\n") : "No stock";
 }
 
-function makePlan() {
-  const stockLen = +stockLenInput.value || 0;
-  const lengths = document.getElementById("lengths").value
-    .split(/[\s,]+/)
-    .map(n => +n)
-    .filter(n => n > 0);
+function roundDown10(x){ return Math.floor(x/10)*10; }
+function roundUp10(x){ return Math.ceil(x/10)*10; }
 
-  const noWeld = document.getElementById("noWeld").checked;
+function autoBaseCut(stockLen, newUsableLen, bins, needs){
+  const maxStockRem = bins.filter(b=>b.kind==="STOCK").reduce((m,b)=>Math.max(m,b.rem),0);
+  if (!(maxStockRem > 0)) return { baseCut: 0, why:"no stock/offcuts" };
 
-  if (!lengths.length) {
-    result.textContent = "No lengths entered.";
-    return;
+  const bigNeeds = needs.filter(n => n > maxStockRem);
+  if (!bigNeeds.length) return { baseCut: 0, why:"stock covers needs" };
+
+  const half = Math.floor(newUsableLen / 2);
+  if (!(half > 0)) return { baseCut: 0, why:"bad NEW usable" };
+
+  const baseMin = Math.max(...bigNeeds.map(n => n - maxStockRem));
+  if (baseMin > half) return { baseCut: 0, why:"cannot 2-per-bar" };
+
+  let base = roundDown10(half);
+  if (base < baseMin){
+    base = roundUp10(baseMin);
+    if (base > half) base = 0;
+  }
+  return { baseCut: base, why: base ? "auto" : "none" };
+}
+
+function makePlan(stockLen, profile, needs, savedTrim, newFrontTrim, newEndReserve, baseCutInput, noWeld){
+  const stockBars = getStock(profile).sort((a,b)=>b-a);
+
+  const bins = stockBars.map((len, idx) => ({
+    kind: "STOCK",
+    base: len,
+    rem: Math.max(0, len - savedTrim),
+    id: `STOCK-${idx+1}`,
+    display: String(len),
+    weldLocked: false
+  }));
+
+  const newUsableLen = Math.max(0, stockLen - newFrontTrim - newEndReserve);
+
+  let baseCut = Math.max(0, Math.round(Number(baseCutInput || 0)));
+  let baseCutMode = "manual";
+  if (baseCut === 0){
+    const auto = autoBaseCut(stockLen, newUsableLen, bins, needs);
+    baseCut = auto.baseCut;
+    baseCutMode = auto.why;
   }
 
-  // NO-WELD MODE
-  if (noWeld) {
-    const impossible = lengths.filter(l => l > stockLen);
-    if (impossible.length) {
-      result.textContent =
-        "=== WHAT TO USE ===\n\n" +
-        "IMPOSSIBLE (no-weld mode):\n" +
-        impossible.join(", ") + "\n\n" +
-        "No-weld mode: ON";
-      return;
+  let newCount = 0;
+  const newDisplays = [];
+
+  function newBin(){
+    newCount++;
+    const disp = `${stockLen}#${newCount}`;
+    const b = { kind:"NEW", base:stockLen, rem:newUsableLen, id:`NEW-${newCount}`, display:disp };
+    bins.push(b);
+    newDisplays.push(disp);
+    return b;
+  }
+
+  function bestFitBin(need){
+    let best = null;
+    for (const b of bins){
+      if (b.rem >= need){
+        const after = b.rem - need;
+        if (!best || after < best.after) best = { b, after };
+      }
+    }
+    return best ? best.b : null;
+  }
+
+  function bestStockFor(need2){
+    let best = null;
+    for (const b of bins){
+      if (b.kind !== "STOCK") continue;
+      if (b.weldLocked) continue;
+      if (b.rem >= need2){
+        const after = b.rem - need2;
+        if (!best || after < best.after) best = { b, after };
+      }
+    }
+    return best ? best.b : null;
+  }
+
+  function takeBaseFromNew(){
+    for (const b of bins){
+      if (b.kind === "NEW" && b.rem >= baseCut) return b;
+    }
+    return newBin();
+  }
+
+  const results = [];
+  let seq = 0;
+  const impossible = [];
+
+  const work = [...needs].sort((a,b)=>b-a);
+
+  for (const need of work){
+    if (need > stockLen) return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
+
+    // --- NO WELD MODE: single bar only ---
+    if (noWeld){
+      let fit = bestFitBin(need);
+
+      if (!fit){
+        const nb = newBin();
+        fit = (nb.rem >= need) ? nb : null;
+      }
+
+      if (!fit){
+        impossible.push(need);
+        continue;
+      }
+
+      fit.rem -= need;
+      seq++;
+      results.push({
+        need, welded:false, seq,
+        mainDisplay: (fit.kind === "NEW") ? fit.display : null,
+        parts:[{ cut: need, fromDisplay: fit.display }]
+      });
+      continue;
     }
 
-    let out = "=== WHAT TO USE ===\n\n";
-    lengths.forEach(l => {
-      out += `${l} = ${l} (${stockLen})\n`;
+    // normal mode
+    const fit = bestFitBin(need);
+    if (fit){
+      fit.rem -= need;
+      seq++;
+      results.push({
+        need, welded:false, seq,
+        mainDisplay: (fit.kind === "NEW") ? fit.display : null,
+        parts:[{ cut: need, fromDisplay: fit.display }]
+      });
+      continue;
+    }
+
+    // weld path
+    if (baseCut > 0 && baseCut < newUsableLen && need > baseCut){
+      const need2 = need - baseCut;
+      const st = bestStockFor(need2);
+      if (st){
+        const nb = takeBaseFromNew();
+        if (nb.rem < baseCut){
+          const nb2 = newBin();
+          nb2.rem -= baseCut;
+          st.rem -= need2;
+          st.weldLocked = true;
+          seq++;
+          results.push({
+            need, welded:true, seq,
+            mainDisplay: nb2.display,
+            parts:[
+              { cut: baseCut, fromDisplay: nb2.display },
+              { cut: need2,  fromDisplay: st.display }
+            ]
+          });
+          continue;
+        }
+
+        nb.rem -= baseCut;
+        st.rem -= need2;
+        st.weldLocked = true;
+
+        seq++;
+        results.push({
+          need, welded:true, seq,
+          mainDisplay: nb.display,
+          parts:[
+            { cut: baseCut, fromDisplay: nb.display },
+            { cut: need2,  fromDisplay: st.display }
+          ]
+        });
+        continue;
+      }
+    }
+
+    // new-only
+    if (need > newUsableLen){
+      return { ok:false, error:`Required ${need} does not fit NEW usable length (${newUsableLen}). Reduce NEW trims or adjust.` };
+    }
+    const nb = newBin();
+    nb.rem -= need;
+    seq++;
+    results.push({
+      need, welded:false, seq,
+      mainDisplay: nb.display,
+      parts:[{ cut: need, fromDisplay: nb.display }]
     });
-    out += `\nNo-weld mode: ON`;
-    result.textContent = out;
-    return;
   }
 
-  // NORMAL MODE (simplified summary output)
-  let out = "=== WHAT TO USE ===\n\n";
-  let newIdx = 1;
-
-  lengths.forEach(l => {
-    if (l <= stockLen) {
-      out += `${l} = ${l} (${stockLen}#${newIdx})\n`;
-      newIdx++;
-    } else {
-      out += `${l} 🔥 = split required\n`;
+  const totalLeftoverUsable = bins.reduce((s,b)=>s + b.rem, 0);
+  return {
+    ok:true,
+    plan:{
+      results,
+      impossible,
+      totalLeftoverUsable,
+      savedTrim,
+      newFrontTrim,
+      newEndReserve,
+      newUsableLen,
+      newDisplays,
+      baseCut,
+      baseCutMode,
+      noWeld
     }
+  };
+}
+
+function format(plan){
+  const out = [];
+  out.push("=== WHAT TO USE ===\n");
+
+  const sorted = [...plan.results].sort((a,b)=>{
+    if (a.welded !== b.welded) return a.welded ? 1 : -1;
+    return a.seq - b.seq;
   });
 
-  result.textContent = out;
+  const stockLines = [];
+  const byNew = new Map();
+
+  for (const r of sorted){
+    if (!r.mainDisplay) stockLines.push(r);
+    else {
+      if (!byNew.has(r.mainDisplay)) byNew.set(r.mainDisplay, []);
+      byNew.get(r.mainDisplay).push(r);
+    }
+  }
+
+  if (stockLines.length){
+    out.push("STOCK / OFFCUTS");
+    for (const r of stockLines){
+      out.push(`${r.need} = ${r.need} (${r.parts[0].fromDisplay})`);
+    }
+    out.push("");
+  }
+
+  const newKeys = (plan.newDisplays || []).slice().sort((a,b)=>{
+    const na = Number((a.split("#")[1]||"0"));
+    const nb = Number((b.split("#")[1]||"0"));
+    return na - nb;
+  });
+
+  for (const key of newKeys){
+    out.push(key);
+    const lines = (byNew.get(key) || []).slice();
+
+    lines.sort((a,b)=>{
+      if (a.welded !== b.welded) return a.welded ? 1 : -1;
+      return a.seq - b.seq;
+    });
+
+    if (!lines.length){
+      out.push("(no cuts)");
+      out.push("");
+      continue;
+    }
+
+    for (const r of lines){
+      if (!r.welded){
+        out.push(`${r.need} = ${r.need} (${r.parts[0].fromDisplay})`);
+      } else {
+        const partsTxt = r.parts.map(p => `${p.cut} (${p.fromDisplay})`).join(" + ");
+        out.push(`${r.need} 🔥 = ${partsTxt}`);
+      }
+    }
+    out.push("");
+  }
+
+  if (plan.impossible && plan.impossible.length){
+    out.push("IMPOSSIBLE (no-weld mode):");
+    out.push(plan.impossible.join(", "));
+    out.push("");
+  }
+
+  out.push(`Leftover saved (usable): ${plan.totalLeftoverUsable} mm`);
+  out.push(`Saved stock trim used: ${plan.savedTrim} mm`);
+  out.push(`NEW usable length: ${plan.newUsableLen} mm (front ${plan.newFrontTrim} + end ${plan.newEndReserve})`);
+  out.push(`Base cut used: ${plan.baseCut} mm (${plan.baseCutMode})`);
+  out.push(`No-weld mode: ${plan.noWeld ? "ON" : "OFF"}`);
+  return out.join("\n");
 }
 
-const stockLenInput = document.getElementById("stockLen");
-const result = document.getElementById("result");
+// UI
+const stockLenEl = document.getElementById("stockLen");
+const profileEl  = document.getElementById("profile");
+const stockTrimEl = document.getElementById("stockTrim");
+const newFrontTrimEl = document.getElementById("newFrontTrim");
+const newEndReserveEl = document.getElementById("newEndReserve");
+const baseCutEl  = document.getElementById("baseCut");
+const lengthsEl  = document.getElementById("lengths");
+const resultEl   = document.getElementById("result");
+const noWeldEl   = document.getElementById("noWeldMode");
+
+const stockProfile = document.getElementById("stockProfile");
+const stockAdd     = document.getElementById("stockAdd");
+const stockView    = document.getElementById("stockView");
+
+noWeldEl.addEventListener("change", () => {
+  baseCutEl.disabled = noWeldEl.checked;
+  baseCutEl.style.opacity = noWeldEl.checked ? "0.6" : "1";
+});
+baseCutEl.disabled = noWeldEl.checked;
+
+document.getElementById("calcBtn").onclick = () => {
+  const stockLen = Math.round(Number(stockLenEl.value));
+  const profile = profileEl.value.trim();
+  const savedTrim = Math.max(0, Math.round(Number(stockTrimEl.value || 0)));
+  const newFrontTrim = Math.max(0, Math.round(Number(newFrontTrimEl.value || 0)));
+  const newEndReserve = Math.max(0, Math.round(Number(newEndReserveEl.value || 0)));
+  const baseCut = Math.max(0, Math.round(Number(baseCutEl.value || 0)));
+  const needs = parseLengths(lengthsEl.value);
+  const noWeld = !!noWeldEl.checked;
+
+  if (!profile) { resultEl.textContent = "❌ Please enter Profile."; return; }
+  if (!(stockLen > 0)) { resultEl.textContent = "❌ Stock Length must be > 0."; return; }
+  if (!needs.length) { resultEl.textContent = "❌ Enter at least one required length."; return; }
+  if (newFrontTrim + newEndReserve >= stockLen){
+    resultEl.textContent = "❌ NEW trims too big (front + end must be less than Stock Length).";
+    return;
+  }
+
+  const res = makePlan(stockLen, profile, needs, savedTrim, newFrontTrim, newEndReserve, baseCut, noWeld);
+  if (!res.ok) { resultEl.textContent = "❌ " + res.error; return; }
+  resultEl.textContent = format(res.plan);
+};
+
+document.getElementById("clearBtn").onclick = () => {
+  lengthsEl.value = "";
+  resultEl.textContent = "—";
+};
+
+document.getElementById("addStock").onclick = () => {
+  const p = stockProfile.value.trim();
+  const v = Math.round(Number(stockAdd.value));
+  if (!p || !(v > 0)) return;
+  const a = getStock(p); a.push(v); setStock(p,a);
+  stockAdd.value = "";
+  refreshStock();
+};
+
+document.getElementById("addFull").onclick = () => {
+  const p = stockProfile.value.trim();
+  const v = Math.round(Number(stockLenEl.value || 11900));
+  if (!p || !(v > 0)) return;
+  const a = getStock(p); a.push(v); setStock(p,a);
+  refreshStock();
+};
+
+document.getElementById("clearStock").onclick = () => {
+  const p = stockProfile.value.trim();
+  if (!p) return;
+  setStock(p, []);
+  refreshStock();
+};
+
+document.querySelectorAll(".tab").forEach(b=>{
+  b.onclick = () => {
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById("calc").style.display = b.dataset.tab==="calc" ? "" : "none";
+    document.getElementById("stock").style.display = b.dataset.tab==="stock" ? "" : "none";
+    refreshStock();
+  };
+});
+
+refreshStock();
 </script>
 
 </body>
