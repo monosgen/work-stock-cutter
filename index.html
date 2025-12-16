@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -31,6 +30,8 @@ textarea { min-height:110px; resize:vertical; }
 .muted { font-size:12px; color:#b8b8c0; }
 .pill { display:inline-block; padding:4px 8px; border:1px solid #2a2a2a; border-radius:999px; font-size:12px; }
 pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:14px; white-space:pre-wrap; word-break:break-word; }
+.row2 { display:grid; grid-template-columns:1fr; gap:10px; }
+@media (min-width:720px){ .row2 { grid-template-columns:1fr 1fr; } }
 </style>
 </head>
 
@@ -46,7 +47,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 <main>
 
 <section id="calc">
-  <div class="muted" style="text-align:center">Version: v7.0</div>
+  <div class="muted" style="text-align:center">Version: v7.1a</div>
 
   <div class="card">
     <label>Stock Length (mm)</label>
@@ -55,14 +56,25 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     <label>Profile</label>
     <input id="profile" value="100/4">
 
-    <label>Stock trim (mm) — applies to SAVED stock/offcuts only</label>
-    <input id="stockTrim" type="number" value="10" min="0" max="200">
+    <div class="row2">
+      <div>
+        <label>Saved stock trim (mm) — applies to SAVED stock/offcuts only</label>
+        <input id="stockTrim" type="number" value="10" min="0" max="500">
+      </div>
+      <div>
+        <label>NEW front trim (mm) — cut off at start (NEW bars only)</label>
+        <input id="newFrontTrim" type="number" value="50" min="0" max="500">
+      </div>
+    </div>
 
-    <label>Base cut from NEW (mm) — 0 = AUTO</label>
+    <label>NEW end reserve (mm) — must be left at end (NEW bars only)</label>
+    <input id="newEndReserve" type="number" value="10" min="0" max="500">
+
+    <label>Base cut from NEW (mm) — 0 = AUTO (uses NEW usable length)</label>
     <input id="baseCut" type="number" value="0" min="0">
 
     <label>Lengths (mm)</label>
-    <textarea id="lengths" placeholder="4094 4094 4308 4308 4458"></textarea>
+    <textarea id="lengths" placeholder="4308 4308 4094 4094"></textarea>
 
     <div class="actions">
       <button class="btn primary" id="calcBtn">Make cut plan</button>
@@ -70,8 +82,9 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
     </div>
 
     <div class="muted" style="margin-top:8px">
-      Rule: stock first. If Base cut is 0, app will AUTO pick a base size (to allow 2 base cuts per NEW bar) and top-up with stock.
-      Stock/offcuts lose “Stock trim” from the crude end. Weld = max 2 bars. Each saved stock piece can be used in at most 1 weld.
+      Rule: stock first. If Base cut is 0, app AUTO picks a base size to allow 2 base cuts per NEW bar (after NEW trims) and top-up with stock.
+      SAVED stock/offcuts lose “Saved stock trim” from the crude end. NEW bars lose “NEW front trim” and must leave “NEW end reserve”.
+      Weld = max 2 bars. Each saved stock piece can be used in at most 1 weld.
     </div>
   </div>
 
@@ -91,12 +104,12 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 
     <div class="actions">
       <button class="btn primary" id="addStock">Add stock</button>
-      <button class="btn" id="addFull">Add full bar (Stock Length)</button>
+      <button class="btn" id="addFull">Add full bar (Stock Length) to SAVED stock</button>
       <button class="btn" id="clearStock">Clear profile stock</button>
     </div>
 
     <div class="muted" style="margin-top:8px">
-      Save leftovers/offcuts here. Trim is applied during planning.
+      Save leftovers/offcuts here. “Saved stock trim” is applied during planning.
     </div>
   </div>
 
@@ -112,7 +125,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
 // Storage
-const LS = "wsc_stock_v7_0";
+const LS = "wsc_stock_v7_1";
 function loadAll(){ try { return JSON.parse(localStorage.getItem(LS)||"{}"); } catch { return {}; } }
 function saveAll(v){ localStorage.setItem(LS, JSON.stringify(v)); }
 function getStock(p){ return (loadAll()[p] || []).slice(); }
@@ -135,63 +148,50 @@ function refreshStock(){
   stockView.textContent = a.length ? a.map(x=>x+" mm").join("\n") : "No stock";
 }
 
-// --- AUTO base cut chooser ---
-// Goal: pick a baseCut that:
-//  1) lets us cut 2 bases per NEW bar => baseCut <= stockLen/2
-//  2) makes remainders fit inside a typical stock piece (after trim)
-// Chooses a rounded (10mm) base.
-function autoBaseCut(stockLen, bins, needs){
-  const maxStockRem = bins
-    .filter(b => b.kind === "STOCK")
-    .reduce((m,b)=>Math.max(m, b.rem), 0);
+function roundDown10(x){ return Math.floor(x/10)*10; }
+function roundUp10(x){ return Math.ceil(x/10)*10; }
 
-  if (!(maxStockRem > 0)) return { baseCut: 0, why: "no stock/offcuts" };
+function autoBaseCut(stockLen, newUsableLen, bins, needs){
+  const maxStockRem = bins.filter(b=>b.kind==="STOCK").reduce((m,b)=>Math.max(m,b.rem),0);
+  if (!(maxStockRem > 0)) return { baseCut: 0, why:"no stock/offcuts" };
 
-  // consider only needs that cannot fit in stock directly
   const bigNeeds = needs.filter(n => n > maxStockRem);
-  if (!bigNeeds.length) return { baseCut: 0, why: "stock covers needs" };
+  if (!bigNeeds.length) return { baseCut: 0, why:"stock covers needs" };
 
-  const half = Math.floor(stockLen / 2);
-  if (!(half > 0)) return { baseCut: 0, why: "bad stockLen" };
+  const half = Math.floor(newUsableLen / 2);
+  if (!(half > 0)) return { baseCut: 0, why:"bad NEW usable" };
 
-  // base must be >= (need - maxStockRem) for the biggest need
   const baseMin = Math.max(...bigNeeds.map(n => n - maxStockRem));
-  if (baseMin > half) return { baseCut: 0, why: "cannot 2-per-bar" };
+  if (baseMin > half) return { baseCut: 0, why:"cannot 2-per-bar" };
 
-  // choose as large as possible (reduces waste + reduces stock take)
-  let base = half;
-
-  // round down to nearest 10mm for cleaner shop numbers
-  base = Math.floor(base / 10) * 10;
-
-  // but ensure >= baseMin after rounding
+  let base = roundDown10(half);
   if (base < baseMin){
-    base = Math.ceil(baseMin / 10) * 10;
+    base = roundUp10(baseMin);
     if (base > half) base = 0;
   }
-
   return { baseCut: base, why: base ? "auto" : "none" };
 }
 
-function makePlan(stockLen, profile, needs, trim, baseCutInput){
+function makePlan(stockLen, profile, needs, savedTrim, newFrontTrim, newEndReserve, baseCutInput){
   const stockBars = getStock(profile).sort((a,b)=>b-a);
 
   const bins = stockBars.map((len, idx) => ({
     kind: "STOCK",
     base: len,
-    rem: Math.max(0, len - trim),
+    rem: Math.max(0, len - savedTrim),
     id: `STOCK-${idx+1}`,
     display: String(len),
     weldLocked: false
   }));
 
-  // decide baseCut
+  const newUsableLen = Math.max(0, stockLen - newFrontTrim - newEndReserve);
+
   let baseCut = Math.max(0, Math.round(Number(baseCutInput || 0)));
   let baseCutMode = "manual";
   if (baseCut === 0){
-    const auto = autoBaseCut(stockLen, bins, needs);
+    const auto = autoBaseCut(stockLen, newUsableLen, bins, needs);
     baseCut = auto.baseCut;
-    baseCutMode = auto.why; // "auto"/"none"/etc
+    baseCutMode = auto.why;
   }
 
   let newCount = 0;
@@ -200,7 +200,7 @@ function makePlan(stockLen, profile, needs, trim, baseCutInput){
   function newBin(){
     newCount++;
     const disp = `${stockLen}#${newCount}`;
-    const b = { kind:"NEW", base:stockLen, rem:stockLen, id:`NEW-${newCount}`, display:disp };
+    const b = { kind:"NEW", base:stockLen, rem:newUsableLen, id:`NEW-${newCount}`, display:disp };
     bins.push(b);
     newDisplays.push(disp);
     return b;
@@ -221,7 +221,7 @@ function makePlan(stockLen, profile, needs, trim, baseCutInput){
     let best = null;
     for (const b of bins){
       if (b.kind !== "STOCK") continue;
-      if (b.weldLocked) continue; // one stock piece used at most once for welding
+      if (b.weldLocked) continue;
       if (b.rem >= need2){
         const after = b.rem - need2;
         if (!best || after < best.after) best = { b, after };
@@ -242,11 +242,8 @@ function makePlan(stockLen, profile, needs, trim, baseCutInput){
   const work = [...needs].sort((a,b)=>b-a);
 
   for (const need of work){
-    if (need > stockLen){
-      return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
-    }
+    if (need > stockLen) return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
 
-    // 1) fit whole into existing bar
     const fit = bestFitBin(need);
     if (fit){
       fit.rem -= need;
@@ -259,12 +256,28 @@ function makePlan(stockLen, profile, needs, trim, baseCutInput){
       continue;
     }
 
-    // 2) baseCut strategy: NEW base + stock top-up
-    if (baseCut > 0 && baseCut < stockLen && need > baseCut){
+    if (baseCut > 0 && baseCut < newUsableLen && need > baseCut){
       const need2 = need - baseCut;
       const st = bestStockFor(need2);
       if (st){
         const nb = takeBaseFromNew();
+        if (nb.rem < baseCut){
+          const nb2 = newBin();
+          nb2.rem -= baseCut;
+          st.rem -= need2;
+          st.weldLocked = true;
+          seq++;
+          results.push({
+            need, welded:true, seq,
+            mainDisplay: nb2.display,
+            parts:[
+              { cut: baseCut, fromDisplay: nb2.display },
+              { cut: need2,  fromDisplay: st.display }
+            ]
+          });
+          continue;
+        }
+
         nb.rem -= baseCut;
         st.rem -= need2;
         st.weldLocked = true;
@@ -282,7 +295,10 @@ function makePlan(stockLen, profile, needs, trim, baseCutInput){
       }
     }
 
-    // 3) fallback: open NEW and cut whole
+    if (need > newUsableLen){
+      return { ok:false, error:`Required ${need} does not fit NEW usable length (${newUsableLen}). Reduce NEW trims or adjust.` };
+    }
+
     const nb = newBin();
     nb.rem -= need;
 
@@ -295,7 +311,20 @@ function makePlan(stockLen, profile, needs, trim, baseCutInput){
   }
 
   const totalLeftoverUsable = bins.reduce((s,b)=>s + b.rem, 0);
-  return { ok:true, plan:{ results, totalLeftoverUsable, trim, newDisplays, baseCut, baseCutMode } };
+  return {
+    ok:true,
+    plan:{
+      results,
+      totalLeftoverUsable,
+      savedTrim,
+      newFrontTrim,
+      newEndReserve,
+      newUsableLen,
+      newDisplays,
+      baseCut,
+      baseCutMode
+    }
+  };
 }
 
 function format(plan){
@@ -359,7 +388,8 @@ function format(plan){
   }
 
   out.push(`Leftover saved (usable): ${plan.totalLeftoverUsable} mm`);
-  out.push(`Stock trim used: ${plan.trim} mm`);
+  out.push(`Saved stock trim used: ${plan.savedTrim} mm`);
+  out.push(`NEW usable length: ${plan.newUsableLen} mm (front ${plan.newFrontTrim} + end ${plan.newEndReserve})`);
   out.push(`Base cut used: ${plan.baseCut} mm (${plan.baseCutMode})`);
   return out.join("\n");
 }
@@ -367,7 +397,9 @@ function format(plan){
 // UI
 const stockLenEl = document.getElementById("stockLen");
 const profileEl  = document.getElementById("profile");
-const trimEl     = document.getElementById("stockTrim");
+const stockTrimEl = document.getElementById("stockTrim");
+const newFrontTrimEl = document.getElementById("newFrontTrim");
+const newEndReserveEl = document.getElementById("newEndReserve");
 const baseCutEl  = document.getElementById("baseCut");
 const lengthsEl  = document.getElementById("lengths");
 const resultEl   = document.getElementById("result");
@@ -379,15 +411,21 @@ const stockView    = document.getElementById("stockView");
 document.getElementById("calcBtn").onclick = () => {
   const stockLen = Math.round(Number(stockLenEl.value));
   const profile = profileEl.value.trim();
-  const trim = Math.max(0, Math.round(Number(trimEl.value || 0)));
+  const savedTrim = Math.max(0, Math.round(Number(stockTrimEl.value || 0)));
+  const newFrontTrim = Math.max(0, Math.round(Number(newFrontTrimEl.value || 0)));
+  const newEndReserve = Math.max(0, Math.round(Number(newEndReserveEl.value || 0)));
   const baseCut = Math.max(0, Math.round(Number(baseCutEl.value || 0)));
   const needs = parseLengths(lengthsEl.value);
 
   if (!profile) { resultEl.textContent = "❌ Please enter Profile."; return; }
   if (!(stockLen > 0)) { resultEl.textContent = "❌ Stock Length must be > 0."; return; }
   if (!needs.length) { resultEl.textContent = "❌ Enter at least one required length."; return; }
+  if (newFrontTrim + newEndReserve >= stockLen){
+    resultEl.textContent = "❌ NEW trims too big (front + end must be less than Stock Length).";
+    return;
+  }
 
-  const res = makePlan(stockLen, profile, needs, trim, baseCut);
+  const res = makePlan(stockLen, profile, needs, savedTrim, newFrontTrim, newEndReserve, baseCut);
   if (!res.ok) { resultEl.textContent = "❌ " + res.error; return; }
   resultEl.textContent = format(res.plan);
 };
