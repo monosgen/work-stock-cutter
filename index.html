@@ -33,12 +33,12 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 .row2 { display:grid; grid-template-columns:1fr; gap:10px; }
 @media (min-width:720px){ .row2 { grid-template-columns:1fr 1fr; } }
 .chkline{
-  display:flex; gap:10px; align-items:center;
+  display:flex; gap:10px; align-items:flex-start;
   padding:10px 12px; border-radius:12px;
   border:1px solid #2a2a2a; background:#0f0f10;
   margin-top:10px;
 }
-.chkline input{ width:auto; }
+.chkline input{ width:auto; margin-top:2px; }
 </style>
 </head>
 
@@ -54,7 +54,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 <main>
 
 <section id="calc">
-  <div class="muted" style="text-align:center">Version: v7.2</div>
+  <div class="muted" style="text-align:center">Version: v7.3</div>
 
   <div class="card">
     <label>Stock Length (mm)</label>
@@ -140,7 +140,7 @@ pre { background:#0f0f10; border:1px solid #2a2a2a; padding:12px; border-radius:
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("./service-worker.js");
 
 // Storage
-const LS = "wsc_stock_v7_2";
+const LS = "wsc_stock_v7_3";
 function loadAll(){ try { return JSON.parse(localStorage.getItem(LS)||"{}"); } catch { return {}; } }
 function saveAll(v){ localStorage.setItem(LS, JSON.stringify(v)); }
 function getStock(p){ return (loadAll()[p] || []).slice(); }
@@ -261,13 +261,21 @@ function makePlan(stockLen, profile, needs, savedTrim, newFrontTrim, newEndReser
   for (const need of work){
     if (need > stockLen) return { ok:false, error:`Required ${need} > Stock Length ${stockLen}.` };
 
-    // --- NO WELD MODE: single bar only ---
+    // --- NO WELD MODE: single bar only (FIXED: can create NEW bars) ---
     if (noWeld){
-      const fit = bestFitBin(need);
+      let fit = bestFitBin(need);
+
+      // If nothing fits yet, create one NEW bar and try again
+      if (!fit){
+        const nb = newBin();
+        fit = (nb.rem >= need) ? nb : null;
+      }
+
       if (!fit){
         impossible.push(need);
         continue;
       }
+
       fit.rem -= need;
       seq++;
       results.push({
@@ -454,7 +462,6 @@ const stockAdd     = document.getElementById("stockAdd");
 const stockView    = document.getElementById("stockView");
 
 noWeldEl.addEventListener("change", () => {
-  // if no-weld is on, base-cut is irrelevant; keep it but visually hint
   baseCutEl.disabled = noWeldEl.checked;
   baseCutEl.style.opacity = noWeldEl.checked ? "0.6" : "1";
 });
